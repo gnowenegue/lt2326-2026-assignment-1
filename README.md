@@ -1,1 +1,1 @@
-# lt2326-2026-assignment-1
+# LT2326 2026 Assignment 1
