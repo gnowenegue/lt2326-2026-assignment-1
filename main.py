@@ -545,3 +545,94 @@ model_bpe_big, metrics_bpe_big = train_validate_and_save(
 )
 
 
+# %% [markdown]
+# ### Fair Comparisons
+#
+# To keep things simple, we have decided to control the training by equal corpus passes. We will train all the models by running 1 full epoch.
+#
+# This allows the model to run through the entire dataset without any truncation.
+#
+# However, the tradeoff is that character tokenizers require a lot more tokens for the same sentence than the BPE tokenizers. This means that the character tokenizers will take longer to train than the BPE tokenizers. Also, with the context length of $128$, the character model corresponds to $128$ characters, which is barely enough for one full sentence. This will cause truncation of the sentences.
+
+# %% [markdown]
+# ### Model Size
+
+# %%
+def inspect(model: DecoderTransformer, name):
+    embedding_dimension = model.embedding.embedding_dim
+    vocabulary_size = model.vocabulary_size
+    context_length = model.context_length
+    input_embeddings_parameters = model.embedding.weight.numel()
+    output_parameters = model.lm_head.weight.numel()
+    total_parameters = sum(p.numel() for p in model.parameters())
+
+    return {
+        "Model name": name,
+        "Embedding dimension": embedding_dimension,
+        "Vocabulary size": vocabulary_size,
+        "Input embeddings parameters": input_embeddings_parameters,
+        "Output parameters": output_parameters,
+        "Context length": context_length,
+        "Total parameters": total_parameters
+    }
+
+
+model_size_df = pd.DataFrame([
+    inspect(model_char, "Character"),
+    inspect(model_bpe_small, "BPE (small)"),
+    inspect(model_bpe_big, "BPE (big)")
+])
+
+display(model_size_df)
+
+# %% [markdown]
+# ### Training
+#
+# #### Learning curves
+
+# %%
+
+plt.figure(figsize=(11, 6))
+
+plt.plot(metrics_char["training_batches"], metrics_char["training_losses"],
+         label="Character (Train)", color="blue", alpha=0.8)
+plt.plot(metrics_char["validation_batches"], metrics_char["validation_losses"],
+         label="Character (Valid)", color="blue", marker="o", linestyle="--")
+
+plt.plot(metrics_bpe_small["training_batches"], metrics_bpe_small["training_losses"],
+         label="Small BPE (Train)", color="orange", alpha=0.8)
+plt.plot(metrics_bpe_small["validation_batches"], metrics_bpe_small["validation_losses"],
+         label="Small BPE (Valid)", color="orange", marker="s", linestyle="--")
+
+plt.plot(metrics_bpe_big["training_batches"], metrics_bpe_big["training_losses"],
+         label="Big BPE (Train)", color="green", alpha=0.8)
+plt.plot(metrics_bpe_big["validation_batches"], metrics_bpe_big["validation_losses"],
+         label="Big BPE (Valid)", color="green", marker="^", linestyle="--")
+
+plt.xlabel("Optimization Steps (Batches)", fontsize=11)
+plt.ylabel("Cross-Entropy Loss", fontsize=11)
+plt.title(
+    "Training & Validation Loss Curves", fontsize=13)
+plt.legend(frameon=True, fontsize=10)
+plt.grid(True, linestyle=":", alpha=0.6)
+plt.tight_layout()
+
+plt.savefig("./artifact/model/learning_curves.png", dpi=300)
+plt.show()
+
+
+# %% [markdown]
+# #### Architecture
+#
+# - **Layers**: 2 decoder layers
+# - **Hidden dimension**: 256
+# - **Attention heads**: 4
+# - **Feed-forward dimension**: 1024
+# - **Context length**: 128 tokens
+# - **Dropout**: 0.1
+# - **Optimizer**: AdamW with a learning rate of 0.0001
+# - **Batch size**: 32
+# - **Training duration**: 1 epoch
+#
+# We also enabled weight tying between the input embedding and the output layer to keep things efficient.
+
