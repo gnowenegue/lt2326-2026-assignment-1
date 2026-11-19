@@ -76,7 +76,9 @@ from torch.optim.adamw import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src import (EOS_ID, LANGUAGES, LANGUAGES_LABEL_MAPPING, LOCAL_RUN,
+from src import (BATCH_SIZE, BPE_VOCAB_SIZE_BIG, BPE_VOCAB_SIZE_SMALL,
+                 CONTEXT_LENGTH, EOS_ID, LANGUAGES, LANGUAGES_LABEL_MAPPING,
+                 LEARNING_RATE, LOCAL_RUN, LOCAL_SAMPLE_SIZE, NUM_EPOCHS,
                  RANDOM_SEED, SPECIAL_TOKENS, UNK_ID, UNK_TOKEN,
                  CharacterTokenizer, DecoderTransformer, LMDataset)
 
@@ -103,12 +105,12 @@ print(f"Using device: {DEVICE}")
 # ### Character-level Tokenizer
 
 # %%
-tokenizer_directory = './artifact/tokenizer'
+tokenizer_directory = "./artifact/tokenizer"
 
 os.makedirs(tokenizer_directory, exist_ok=True)
 
 
-character_tokenizer_file = f'{tokenizer_directory}/character-tokenizer.json'
+character_tokenizer_file = f"{tokenizer_directory}/character-tokenizer.json"
 
 if os.path.exists(character_tokenizer_file):
     print(f"Tokenizer already exists at {character_tokenizer_file}.")
@@ -116,16 +118,16 @@ if os.path.exists(character_tokenizer_file):
         character_tokenizer_file
     )
 else:
-    character_tokenizer = CharacterTokenizer('./data/tokenizer/balanced.txt')
+    character_tokenizer = CharacterTokenizer("./data/tokenizer/balanced.txt")
     character_tokenizer.save(character_tokenizer_file)
 
 print(f"Total vocab size: {len(character_tokenizer.vocab):,d}")
 print(character_tokenizer.vocab[:10])
 
 print(
-    character_tokenizer.encode('hello').ids,
-    character_tokenizer.encode('hello').tokens,
-    character_tokenizer.decode(character_tokenizer.encode('hello').ids)
+    character_tokenizer.encode("hello").ids,
+    character_tokenizer.encode("hello").tokens,
+    character_tokenizer.decode(character_tokenizer.encode("hello").ids)
 )
 print(character_tokenizer.encode("✨").ids, UNK_ID)
 
@@ -154,9 +156,9 @@ def train_bpe(vocab_size, input_file, output_file):
 
 # %%
 bpe_tokenizer_small = train_bpe(
-    10000, './data/tokenizer/balanced.txt', f'{tokenizer_directory}/bpe-tokenizer-small.json')
+    BPE_VOCAB_SIZE_SMALL, "./data/tokenizer/balanced.txt", f"{tokenizer_directory}/bpe-tokenizer-small.json")
 bpe_tokenizer_big = train_bpe(
-    38500, './data/tokenizer/balanced.txt', f'{tokenizer_directory}/bpe-tokenizer-big.json')
+    BPE_VOCAB_SIZE_BIG, "./data/tokenizer/balanced.txt", f"{tokenizer_directory}/bpe-tokenizer-big.json")
 
 print(f"Small tokenizer's size: {bpe_tokenizer_small.get_vocab_size():,d}")
 print(f"Big tokenizer's size: {bpe_tokenizer_big.get_vocab_size():,d}")
@@ -182,10 +184,10 @@ print(f"Big tokenizer's size: {bpe_tokenizer_big.get_vocab_size():,d}")
 def load_dataset(type):
     dataset = {}
     random.seed(RANDOM_SEED)
-    sample_size = 1000 if LOCAL_RUN else None
+    sample_size = LOCAL_SAMPLE_SIZE if LOCAL_RUN else None
 
     for language in LANGUAGES:
-        with open(f'./data/{type}/{language}.txt', 'r', encoding='utf-8') as f:
+        with open(f"./data/{type}/{language}.txt", "r", encoding="utf-8") as f:
             lines = [line.strip() for line in f]
 
             if LOCAL_RUN:
@@ -265,14 +267,14 @@ samples = {
 }
 
 for language, sample in samples.items():
-    print('=' * 10, f'{LANGUAGES_LABEL_MAPPING[language].upper()}', '=' * 10)
+    print("=" * 10, f"{LANGUAGES_LABEL_MAPPING[language].upper()}", "=" * 10)
     print(sample)
     print(f"Character Tokenizer:\n{character_tokenizer.encode(sample).tokens}")
     print(
         f"BPE Tokenizer (small):\n{bpe_tokenizer_small.encode(sample).tokens}"
     )
     print(f"BPE Tokenizer (big):\n{bpe_tokenizer_big.encode(sample).tokens}")
-    print('\n', '-' * 50, '\n')
+    print("\n", "-" * 50, "\n")
 
 # %% [markdown]
 # ##### English
@@ -296,13 +298,13 @@ for language, sample in samples.items():
 # %%
 train_dataset = {}
 for language in LANGUAGES:
-    with open(f'./data/train/{language}.txt', 'r', encoding='utf-8') as f:
+    with open(f"./data/train/{language}.txt", "r", encoding="utf-8") as f:
         train_dataset[language] = [line.strip() for line in f]
 
 
-def create_data_loader(dataset, tokenizer, type='train', shuffle=True, context_length=128, batch_size=32):
-    type_label = 'validation' if type == 'valid' else f'{type}ing'
-    is_train = type == 'train'
+def create_data_loader(dataset, tokenizer, type="train", shuffle=True, context_length=CONTEXT_LENGTH, batch_size=BATCH_SIZE):
+    type_label = "validation" if type == "valid" else f"{type}ing"
+    is_train = type == "train"
 
     data = []
 
@@ -310,7 +312,7 @@ def create_data_loader(dataset, tokenizer, type='train', shuffle=True, context_l
         data.extend(sentences)
 
     # for language in LANGUAGES:
-    #     with open(f'./data/{type}/{language}.txt', 'r', encoding='utf-8') as f:
+    #     with open(f"./data/{type}/{language}.txt", "r", encoding="utf-8") as f:
     #         data.extend([line.strip() for line in f])
 
     print(
@@ -384,7 +386,7 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
     model = DecoderTransformer(vocabulary_size=tokenizer.get_vocab_size())
     model = model.to(DEVICE)
 
-    optimizer = AdamW(model.parameters(), lr=0.0001)
+    optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
 
     training_batches = []
     training_losses = []
@@ -393,16 +395,14 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
 
     validation_interval = len(training_data_loader) // 4
 
-    NUM_EPOCH = 1
-
-    for epoch in range(NUM_EPOCH):
+    for epoch in range(NUM_EPOCHS):
         model.train()
 
         running_training_loss = 0.0
 
         training_progress_bar = tqdm(
             training_data_loader,
-            f"[Training] Epoch {epoch + 1} / {NUM_EPOCH}"
+            f"[Training] Epoch {epoch + 1} / {NUM_EPOCHS}"
         )
 
         for batch, (x, y) in enumerate(training_progress_bar, 1):
@@ -436,7 +436,7 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
                 running_validation_loss = 0.0
                 validation_progress_bar = tqdm(
                     validation_data_loader,
-                    f"[Validation] Epoch {epoch + 1} / {NUM_EPOCH}"
+                    f"[Validation] Epoch {epoch + 1} / {NUM_EPOCHS}"
                 )
 
                 with torch.no_grad():
@@ -794,8 +794,8 @@ for language in LANGUAGES:
         tokens = encoding.tokens
         ids = encoding.ids
 
-        # truncate to 128 context length
-        ids = ids[:128]
+        # truncate to context length
+        ids = ids[:CONTEXT_LENGTH]
 
         x = torch.tensor([ids[:-1]]).to(DEVICE)
         y = torch.tensor([ids[1:]]).to(DEVICE)
