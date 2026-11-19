@@ -1,0 +1,110 @@
+[
+  {
+    "Tokenizer":"Character Tokenizer",
+    "Language":"English",
+    "Vocabulary Size":7648,
+    "Total Tokens":368269,
+    "Unique Tokens":187,
+    "Tokens\/Sentence":81.1165198238,
+    "Characters\/Token":1.0,
+    "Total Characters":368269,
+    "Total UNK":54,
+    "UNK Rate":0.0001466319
+  },
+  {
+    "Tokenizer":"Character Tokenizer",
+    "Language":"Turkish",
+    "Vocabulary Size":7648,
+    "Total Tokens":368383,
+    "Unique Tokens":221,
+    "Tokens\/Sentence":98.6299866131,
+    "Characters\/Token":1.0,
+    "Total Characters":368383,
+    "Total UNK":15,
+    "UNK Rate":0.0000407185
+  },
+  {
+    "Tokenizer":"Character Tokenizer",
+    "Language":"Chinese",
+    "Vocabulary Size":7648,
+    "Total Tokens":368266,
+    "Unique Tokens":4526,
+    "Tokens\/Sentence":38.5457400042,
+    "Characters\/Token":1.0,
+    "Total Characters":368266,
+    "Total UNK":208,
+    "UNK Rate":0.0005648091
+  },
+  {
+    "Tokenizer":"BPE Tokenizer (small)",
+    "Language":"English",
+    "Vocabulary Size":10000,
+    "Total Tokens":131384,
+    "Unique Tokens":1450,
+    "Tokens\/Sentence":28.9392070485,
+    "Characters\/Token":2.8029973208,
+    "Total Characters":368269,
+    "Total UNK":54,
+    "UNK Rate":0.000411009
+  },
+  {
+    "Tokenizer":"BPE Tokenizer (small)",
+    "Language":"Turkish",
+    "Vocabulary Size":10000,
+    "Total Tokens":131597,
+    "Unique Tokens":1752,
+    "Tokens\/Sentence":35.2334672021,
+    "Characters\/Token":2.7993267324,
+    "Total Characters":368383,
+    "Total UNK":15,
+    "UNK Rate":0.0001139844
+  },
+  {
+    "Tokenizer":"BPE Tokenizer (small)",
+    "Language":"Chinese",
+    "Vocabulary Size":10000,
+    "Total Tokens":301287,
+    "Unique Tokens":6020,
+    "Tokens\/Sentence":31.5351685158,
+    "Characters\/Token":1.222309625,
+    "Total Characters":368266,
+    "Total UNK":208,
+    "UNK Rate":0.0006903716
+  },
+  {
+    "Tokenizer":"BPE Tokenizer (big)",
+    "Language":"English",
+    "Vocabulary Size":38500,
+    "Total Tokens":91195,
+    "Unique Tokens":8462,
+    "Tokens\/Sentence":20.0870044053,
+    "Characters\/Token":4.0382586765,
+    "Total Characters":368269,
+    "Total UNK":54,
+    "UNK Rate":0.0005921377
+  },
+  {
+    "Tokenizer":"BPE Tokenizer (big)",
+    "Language":"Turkish",
+    "Vocabulary Size":38500,
+    "Total Tokens":86829,
+    "Unique Tokens":9955,
+    "Tokens\/Sentence":23.2473895582,
+    "Characters\/Token":4.2426263115,
+    "Total Characters":368383,
+    "Total UNK":15,
+    "UNK Rate":0.0001727533
+  },
+  {
+    "Tokenizer":"BPE Tokenizer (big)",
+    "Language":"Chinese",
+    "Vocabulary Size":38500,
+    "Total Tokens":229022,
+    "Unique Tokens":19732,
+    "Tokens\/Sentence":23.9713209127,
+    "Characters\/Token":1.6079939918,
+    "Total Characters":368266,
+    "Total UNK":208,
+    "UNK Rate":0.0009082097
+  }
+]
