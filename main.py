@@ -294,33 +294,49 @@ for language, sample in samples.items():
 # ### Prepare the data loaders
 
 # %%
-def create_data_loader(languages, tokenizer, context_length, batch_size, type):
+train_dataset = {}
+for language in LANGUAGES:
+    with open(f'./data/train/{language}.txt', 'r', encoding='utf-8') as f:
+        train_dataset[language] = [line.strip() for line in f]
+
+
+def create_data_loader(dataset, tokenizer, type='train', shuffle=True, context_length=128, batch_size=32):
     type_label = 'validation' if type == 'valid' else f'{type}ing'
+    is_train = type == 'train'
 
     data = []
 
-    for language in languages:
-        with open(f'./data/{type}/{language}.txt', 'r', encoding='utf-8') as f:
-            data.extend([line.strip() for line in f])
+    for sentences in dataset.values():
+        data.extend(sentences)
+
+    # for language in LANGUAGES:
+    #     with open(f'./data/{type}/{language}.txt', 'r', encoding='utf-8') as f:
+    #         data.extend([line.strip() for line in f])
 
     print(
-        f"Total {type_label} sentences across {len(languages)} languages: {len(data):,d}"
-    )
+        f"Total {type_label} sentences across {len(dataset)} languages: {len(data):,d}")
+    # print(
+    #     f"Total {type_label} sentences across {len(LANGUAGES)} languages: {len(data):,d}"
+    # )
 
-    random.seed(2326)
-    random.shuffle(data)
+    if is_train:
+        random.seed(RANDOM_SEED)
+        random.shuffle(data)
+
     print(f"Sample {type_label} data: {data[:10]}")
 
     encodings = tokenizer.encode_batch(data)
-    print(encodings[0], encodings[0].ids, encodings[0].tokens)
+    # print(encodings[0], encodings[0].ids, encodings[0].tokens)
     token_ids = []
 
     for encoding in encodings:
         token_ids.extend(encoding.ids)
         token_ids.append(EOS_ID)
 
-    print(
-        f"Total {type_label} tokens across {len(languages)} languages: {len(token_ids):,d}")
+    print(f"Total {type_label} tokens: {len(token_ids):,d}")
+
+    # print(
+    # f"Total {type_label} tokens across {len(LANGUAGES)} languages: {len(token_ids):,d}")
 
     dataset = LMDataset(
         tokens=torch.tensor(token_ids),
@@ -329,91 +345,35 @@ def create_data_loader(languages, tokenizer, context_length, batch_size, type):
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=batch_size,
-        shuffle=True
+        shuffle=is_train
     )
 
     return data_loader
 
 
+def get_loaders(label, tokenizer):
+    print("=" * 50)
+    print("#" * 10, label.upper(), "#" * 10)
+    print("-" * 50)
+    train_loader = create_data_loader(train_dataset, tokenizer, type="train")
+    print()
+    valid_loader = create_data_loader(valid_dataset, tokenizer, type="valid")
+    print("-" * 50)
+    print("=" * 50)
+    print()
+    return train_loader, valid_loader
+
+
 # %%
-print("="*50)
-print("#"*10, "character tokenizer".upper(), "#"*10)
-print("-"*50)
-
-training_data_loader_char = create_data_loader(
-    languages=LANGUAGES,
-    tokenizer=character_tokenizer,
-    context_length=128,
-    batch_size=32,
-    type='train'
+training_data_loader_char, validation_data_loader_char = get_loaders(
+    "Character Tokenizer", character_tokenizer
 )
-
-print()
-
-validation_data_loader_char = create_data_loader(
-    languages=LANGUAGES,
-    tokenizer=character_tokenizer,
-    context_length=128,
-    batch_size=32,
-    type='valid'
+training_data_loader_bpe_small, validation_data_loader_bpe_small = get_loaders(
+    "BPE Tokenizer (small)", bpe_tokenizer_small
 )
-
-print("-"*50)
-print("="*50)
-
-print()
-
-print("="*50)
-print("#"*10, "bpe (small) tokenizer".upper(), "#"*10)
-print("-"*50)
-
-training_data_loader_bpe_small = create_data_loader(
-    languages=LANGUAGES,
-    tokenizer=bpe_tokenizer_small,
-    context_length=128,
-    batch_size=32,
-    type='train'
+training_data_loader_bpe_big, validation_data_loader_bpe_big = get_loaders(
+    "BPE Tokenizer (big)", bpe_tokenizer_big
 )
-
-print()
-
-validation_data_loader_bpe_small = create_data_loader(
-    languages=LANGUAGES,
-    tokenizer=bpe_tokenizer_small,
-    context_length=128,
-    batch_size=32,
-    type='valid'
-)
-
-print("-"*50)
-print("="*50)
-
-print()
-
-print("="*50)
-print("#"*10, "bpe (big) tokenizer".upper(), "#"*10)
-print("-"*50)
-
-training_data_loader_bpe_big = create_data_loader(
-    languages=LANGUAGES,
-    tokenizer=bpe_tokenizer_big,
-    context_length=128,
-    batch_size=32,
-    type='train'
-)
-
-print()
-
-validation_data_loader_bpe_big = create_data_loader(
-    languages=LANGUAGES,
-    tokenizer=bpe_tokenizer_big,
-    context_length=128,
-    batch_size=32,
-    type='valid'
-)
-
-print("-"*50)
-print("="*50)
 
 
 # %% [markdown]
@@ -425,8 +385,14 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
     model = model.to(DEVICE)
 
     optimizer = AdamW(model.parameters(), lr=0.0001)
-    training_loss = []
-    validation_loss = []
+
+    training_batches = []
+    training_losses = []
+    validation_batches = []
+    validation_losses = []
+
+    validation_interval = len(training_data_loader) // 4
+
     NUM_EPOCH = 1
 
     for epoch in range(NUM_EPOCH):
@@ -434,8 +400,10 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
 
         running_training_loss = 0.0
 
-        training_progress_bar = tqdm(training_data_loader,
-                                     f"[Training] Epoch {epoch + 1} / {NUM_EPOCH}")
+        training_progress_bar = tqdm(
+            training_data_loader,
+            f"[Training] Epoch {epoch + 1} / {NUM_EPOCH}"
+        )
 
         for batch, (x, y) in enumerate(training_progress_bar, 1):
             x = x.to(DEVICE)
@@ -455,91 +423,125 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
             optimizer.step()
 
             running_training_loss += loss.item()
+            average_training_loss = running_training_loss / batch
             training_progress_bar.set_postfix(
-                batch_loss=f"{loss.item():.4f}", avg_loss=f"{running_training_loss / batch:.4f}")
+                batch_loss=f"{loss.item():.4f}", avg_loss=f"{average_training_loss:.4f}")
 
-        model.eval()
-        running_validation_loss = 0.0
-        validation_progress_bar = tqdm(validation_data_loader,
-                                       f"[Validation] Epoch {epoch + 1} / {NUM_EPOCH}")
+            if batch % 50 == 0 or batch == len(training_data_loader):
+                training_batches.append(batch)
+                training_losses.append(average_training_loss)
 
-        with torch.no_grad():
-            for batch, (x, y) in enumerate(validation_progress_bar, 1):
-                x, y = x.to(DEVICE), y.to(DEVICE)
-                logits = model(x)
-                logits_flatten = logits.reshape(-1, logits.size(2))
-                targets_flatten = y.reshape(-1)
-                loss = F.cross_entropy(logits_flatten, targets_flatten)
+            if batch % validation_interval == 0 or batch == len(training_data_loader):
+                model.eval()
+                running_validation_loss = 0.0
+                validation_progress_bar = tqdm(
+                    validation_data_loader,
+                    f"[Validation] Epoch {epoch + 1} / {NUM_EPOCH}"
+                )
 
-                running_validation_loss += loss.item()
-                training_progress_bar.set_postfix(
-                    batch_loss=f"{loss.item():.4f}", avg_loss=f"{running_validation_loss / batch:.4f}")
+                with torch.no_grad():
+                    for _, (x, y) in enumerate(validation_progress_bar, 1):
+                        x, y = x.to(DEVICE), y.to(DEVICE)
+                        logits = model(x)
+                        logits_flatten = logits.reshape(-1, logits.size(2))
+                        targets_flatten = y.reshape(-1)
+                        loss = F.cross_entropy(logits_flatten, targets_flatten)
+
+                        running_validation_loss += loss.item()
+                        average_validation_loss = running_validation_loss / \
+                            len(validation_data_loader)
+                        validation_progress_bar.set_postfix(
+                            batch_loss=f"{loss.item():.4f}", avg_loss=f"{average_validation_loss:.4f}")
+
+                    validation_batches.append(batch)
+                    validation_losses.append(average_validation_loss)
+
+                model.train()
 
         epoch_training_loss = running_training_loss/len(training_data_loader)
-        training_loss.append(epoch_training_loss)
-        epoch_validation_loss = running_validation_loss / \
-            len(validation_data_loader)
-        validation_loss.append(epoch_validation_loss)
+        # training_loss.append(epoch_training_loss)
+        # epoch_validation_loss = running_validation_loss / \
+        # len(validation_data_loader)
+        # validation_loss.append(epoch_validation_loss)
 
-        print(
-            f'Average loss for epoch {epoch + 1}: training = {epoch_training_loss:.4f} | validation = {epoch_validation_loss:.4f}\n'
+        # print(
+        #     f'Average loss for epoch {epoch + 1}: training = {epoch_training_loss:.4f} | validation = {epoch_validation_loss:.4f}\n'
+        # )
+
+    metrics = {
+        "training_batches": training_batches,
+        "training_losses": training_losses,
+        "validation_batches": validation_batches,
+        "validation_losses": validation_losses
+    }
+
+    return model, metrics
+
+
+def train_validate_and_save(label, name, tokenizer, train_loader, valid_loader):
+    print("=" * 50)
+    print("#" * 10, label.upper(), "#" * 10)
+    print("-" * 50)
+
+    model_path = f"./artifact/model/model_{name}.pth"
+    metrics_path = f"./artifact/model/metrics_{name}.json"
+
+    if os.path.exists(model_path) and os.path.exists(metrics_path):
+        print(f"Model and metrics already exist for {name}")
+        model = DecoderTransformer(
+            vocabulary_size=tokenizer.get_vocab_size()
+        ).to(DEVICE)
+        model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+        model.eval()
+
+        with open(metrics_path, "r", encoding="utf-8") as f:
+            metrics = json.load(f)
+    else:
+        print(f"Training model for {label}...")
+        model, metrics = train_and_validate(
+            tokenizer,
+            train_loader,
+            valid_loader
         )
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
+        torch.save(model.state_dict(), model_path)
+        print(f"Model saved to {model_path}")
 
-    return model
+        with open(metrics_path, "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2)
+        print(f"Metrics saved to {metrics_path}")
+
+    print("-" * 50)
+    print("=" * 50)
+
+    return model, metrics
 
 
 # %%
-print("="*50)
-print("#"*10, "character tokenizer".upper(), "#"*10)
-print("-"*50)
-
-model_char = train_and_validate(
+model_char, metrics_char = train_validate_and_save(
+    "Character Tokenizer",
+    "char",
     character_tokenizer,
     training_data_loader_char,
     validation_data_loader_char
 )
 
-torch.save(model_char.state_dict(), "./artifact/model/model_char.pth")
-
-print("-"*50)
-print("="*50)
-
 # %%
-print("="*50)
-print("#"*10, "bpe (small) tokenizer".upper(), "#"*10)
-print("-"*50)
-
-model_bpe_small = train_and_validate(
+model_bpe_small, metrics_bpe_small = train_validate_and_save(
+    "BPE Tokenizer (small)",
+    "bpe_small",
     bpe_tokenizer_small,
     training_data_loader_bpe_small,
     validation_data_loader_bpe_small
 )
 
-torch.save(
-    model_bpe_small.state_dict(),
-    "./artifact/model/model_bpe_small.pth"
-)
-
-print("-"*50)
-print("="*50)
-
 # %%
-# torch.load("./artifact/model/model_bpe_small.pth")
-
-# %%
-print("="*50)
-print("#"*10, "bpe (big) tokenizer".upper(), "#"*10)
-print("-"*50)
-
-model_bpe_big = train_and_validate(
+model_bpe_big, metrics_bpe_big = train_validate_and_save(
+    "BPE Tokenizer (big)",
+    "bpe_big",
     bpe_tokenizer_big,
     training_data_loader_bpe_big,
     validation_data_loader_bpe_big
 )
 
-torch.save(model_bpe_big.state_dict(), "./artifact/model/model_bpe_big.pth")
 
-print("-"*50)
-print("="*50)
-
-# %%
