@@ -1,19 +1,33 @@
-UNK_TOKEN = '<UNK>'
-PAD_TOKEN = '<PAD>'
-BOS_TOKEN = '<BOS>'
-EOS_TOKEN = '<EOS>'
+UNK_TOKEN = "<UNK>"
+PAD_TOKEN = "<PAD>"
+BOS_TOKEN = "<BOS>"
+EOS_TOKEN = "<EOS>"
 SPECIAL_TOKENS = [
     UNK_TOKEN,
     PAD_TOKEN,
     BOS_TOKEN,
-    EOS_TOKEN
+    EOS_TOKEN,
 ]
 UNK_ID, PAD_ID, BOS_ID, EOS_ID = range(len(SPECIAL_TOKENS))
-LANGUAGES = ['en', 'tr', 'zh']
+LANGUAGES = ["en", "tr", "zh"]
 LANGUAGES_LABEL_MAPPING = {
-    'en': 'English',
-    'tr': 'Turkish',
-    'zh': 'Chinese'
+    "en": "English",
+    "tr": "Turkish",
+    "zh": "Chinese",
 }
 RANDOM_SEED = 13
 LOCAL_RUN = False
+LOCAL_SAMPLE_SIZE = 1000
+
+BPE_VOCAB_SIZE_SMALL = 10000
+BPE_VOCAB_SIZE_BIG = 38500
+
+TRANSFORMER_LAYER = 2
+HIDDEN_DIMENSION = 256
+ATTENTION_HEAD = 4
+FEED_FORWARD_DIMENSION = 1024
+DROPOUT = 0.1
+CONTEXT_LENGTH = 128
+BATCH_SIZE = 32
+LEARNING_RATE = 0.0001
+NUM_EPOCHS = 1
