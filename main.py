@@ -636,3 +636,182 @@ plt.show()
 #
 # We also enabled weight tying between the input embedding and the output layer to keep things efficient.
 
+# %% [markdown]
+# ## Part 3: Evaluation and Analysis
+#
+# ### Comparing Models
+
+# %%
+def compute_bpc(model, data_loader, total_characters):
+    model.eval()
+
+    total_loss_nats = 0.0
+
+    with torch.no_grad():
+        for x, y in data_loader:
+            x, y = x.to(DEVICE), y.to(DEVICE)
+            logits = model(x)
+            loss = F.cross_entropy(
+                logits.reshape(-1, logits.size(-1)),
+                y.reshape(-1),
+                reduction="sum",
+            )
+            total_loss_nats += loss.item()
+
+    total_loss_bits = total_loss_nats / math.log(2)
+
+    return total_loss_bits / total_characters
+
+
+# %%
+test_dataset = load_dataset("test")
+
+test_characters = {
+    language: sum(len(line) for line in sentences)
+    for language, sentences in test_dataset.items()
+}
+# test_characters = {}
+
+# for language in LANGUAGES:
+#     with open(f"./data/test/{language}.txt", encoding="utf-8") as f:
+#         lines = f.readlines()
+#         total_characters = sum(len(line.strip()) for line in lines)
+#         test_characters[language] = total_characters
+#         print(f"{language}: {total_characters} characters")
+
+results = []
+models = {
+    "Character": (model_char, character_tokenizer),
+    "BPE (small)": (model_bpe_small, bpe_tokenizer_small),
+    "BPE (big)": (model_bpe_big, bpe_tokenizer_big)
+}
+
+for model_name, (model, tokenizer) in models.items():
+    for language in LANGUAGES:
+        loader = create_data_loader(
+            {language: test_dataset[language]},
+            tokenizer,
+            type="test"
+        )
+        bpc = compute_bpc(model, loader, test_characters[language])
+        results.append(
+            {
+                "Model": model_name,
+                "Language": LANGUAGES_LABEL_MAPPING[language],
+                "BPC": round(bpc, 4),
+            }
+        )
+
+results_df = pd.DataFrame(results)
+display(results_df)
+
+# %%
+pivot_df = results_df.pivot(index="Language", columns="Model", values="BPC")
+ax = pivot_df.plot(kind="bar", figsize=(8, 4), rot=0, edgecolor="black")
+ax.set_ylabel("BPC")
+ax.set_title("BPC by Model and Language (Lower is Better)")
+plt.grid(axis="y", linestyle="--", alpha=0.5)
+plt.tight_layout()
+
+plt.savefig("./artifact/model/bpc.png", dpi=300)
+plt.show()
+
+
+# %% [markdown]
+# ### Who Gets the Vocabulary?
+
+# %%
+def analyze_vocabulary(tokenizer, dataset, threshold=0.9):
+    vocab_size = tokenizer.get_vocab_size()
+
+    counts = {}
+    for language, sentences in dataset.items():
+        counts[language] = Counter(
+            token_id
+            for encoding in tokenizer.encode_batch(sentences)
+            for token_id in encoding.ids
+        )
+
+    stats = {
+        "English": 0,
+        "Turkish": 0,
+        "Chinese": 0,
+        "Shared": 0,
+        "Unused": 0,
+        "Total": vocab_size,
+    }
+
+    for token_id in range(vocab_size):
+        en_count = counts["en"][token_id]
+        tr_count = counts["tr"][token_id]
+        zh_count = counts["zh"][token_id]
+        total = en_count + tr_count + zh_count
+
+        if total == 0:
+            stats["Unused"] += 1
+        elif en_count / total >= threshold:
+            stats["English"] += 1
+        elif tr_count / total >= threshold:
+            stats["Turkish"] += 1
+        elif zh_count / total >= threshold:
+            stats["Chinese"] += 1
+        else:
+            stats["Shared"] += 1
+
+    return stats
+
+
+vocabulary_results = []
+
+for name, tokenizer in tokenizers.items():
+    stats = analyze_vocabulary(tokenizer, train_dataset)
+    row = {"Tokenizer": name}
+    row.update(stats)
+    vocabulary_results.append(row)
+
+vocabulary_results_df = pd.DataFrame(vocabulary_results)
+display(vocabulary_results_df)
+
+# %% [markdown]
+# ### Relating Tokenization to Model Behavior
+
+# %% [markdown]
+# ### Error Analysis
+#
+
+# %%
+random.seed(RANDOM_SEED)
+
+for language in LANGUAGES:
+    sentence = random.choice(test_dataset[language])
+    print("=" * 50)
+    print(f"[{LANGUAGES_LABEL_MAPPING[language]}]")
+    print(f"Sentence: {sentence}")
+    print("-" * 50)
+
+    for model_name, (model, tokenizer) in models.items():
+        encoding = tokenizer.encode(sentence)
+        tokens = encoding.tokens
+        ids = encoding.ids
+
+        # truncate to 128 context length
+        ids = ids[:128]
+
+        x = torch.tensor([ids[:-1]]).to(DEVICE)
+        y = torch.tensor([ids[1:]]).to(DEVICE)
+
+        with torch.no_grad():
+            logits = model(x)
+            loss = F.cross_entropy(logits.squeeze(0), y.squeeze(0)).item()
+
+        print(f"\n{model_name} ({len(tokens)} tokens, Loss: {loss:.4f}):")
+        print(f"Tokens: {tokens}")
+
+    print("=" * 50)
+    print()
+
+# %% [markdown]
+# ### Conclusion
+
+# %% [markdown]
+#
