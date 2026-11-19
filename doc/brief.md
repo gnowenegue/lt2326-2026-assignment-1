@@ -29,6 +29,7 @@ The assignment is worth **30 points**. The due date is **2026-10-04**.
 # The Data
 
 You will use text in three languages:
+
 - English
 - Turkish
 - Mandarin Chinese
@@ -36,11 +37,13 @@ You will use text in three languages:
 The corpus is derived from Wikipedia data from the Leipzig Corpora Collection. The data has already been prepared, so you do not need to download or extract the original corpora.
 
 The files are available on `mltgpu` and `mltgpu-2` in:
+
 ```
 /srv/data/lt2326-h26/a1/
 ```
 
 The directory has approximately the following structure:
+
 ```
 train/
     en.txt
@@ -70,6 +73,7 @@ Each language file contains one sentence per line.
 The datasets contain approximately equal amounts of English, Turkish, and Chinese text, measured in **Unicode characters**. Exact statistics are available in `metadata.json`.
 
 Use:
+
 - `train/` to train tokenizers and language models;
 - `valid/` to inspect training progress and make experimental decisions;
 - `test/` only for final evaluation.
@@ -83,6 +87,7 @@ You may use less than the full training data if computational requirements becom
 # Part 1: The Tokenizers (7 points)
 
 Create at least three tokenization conditions:
+
 - A character-level tokenizer;
 - A BPE tokenizer with a relatively small vocabulary;
 - A BPE tokenizer with a substantially larger vocabulary.
@@ -98,6 +103,7 @@ Your character-level tokenizer should also be constructed using only the trainin
 ## Before You Run the Experiment
 
 Write down a few predictions. For example:
+
 - Which language do you expect to require the most tokens?
 - How do you expect the larger BPE vocabulary to change the representation of each language?
 - What kinds of units do you expect BPE to learn in English, Turkish, and Chinese?
@@ -108,6 +114,7 @@ Briefly explain your reasoning. Your predictions do not have to be correct.
 ## Analyze the Tokenizers
 
 Using the **validation data**, report for each tokenizer and language:
+
 - Vocabulary size;
 - Total number of tokens needed to encode the validation set;
 - Average number of tokens per sentence;
@@ -126,6 +133,7 @@ The important part is not simply describing what you see. Try to explain **why t
 Train one small **decoder-only Transformer language model** for each tokenization condition.
 
 A reasonable starting architecture is:
+
 - 2 Transformer layers;
 - Hidden dimension around 256;
 - 4 attention heads;
@@ -138,6 +146,7 @@ You may change these values if necessary.
 The important requirement is that the **Transformer architecture remains the same across your main tokenization conditions**.
 
 You should therefore train (at least) three multilingual models:
+
 ```
 character tokenizer  -> Transformer LM
 small BPE tokenizer  -> Transformer LM
@@ -151,10 +160,12 @@ Train all models from scratch. Do **not** use pretrained language models.
 A central question in this assignment is what constitutes a fair comparison.
 
 One tokenizer may represent exactly the same corpus using many more tokens than another. This means that:
+
 - Training for the same number of epochs exposes models to the same underlying text, but not necessarily the same amount of computation;
 - Training for the same number of tokens may expose models to different amounts of underlying text.
 
 Choose a policy for controlling the amount of training. For example, you might control by:
+
 - Number of optimization updates;
 - Amount of original text processed;
 - Complete passes through the corpus;
@@ -171,6 +182,7 @@ If the embedding dimension is $d$ and vocabulary size is $V$, the input embeddin
 $$V \times d$$
 
 Report for each model:
+
 - Total number of parameters;
 - Parameters in the input embeddings;
 - Parameters in the output vocabulary layer.
@@ -182,6 +194,7 @@ You do **not** need to make all models the same size. Instead, treat parameter c
 Record at least training and validation loss and plot appropriate learning curves.
 
 Your report should briefly explain:
+
 - The architecture you used;
 - Your training-control policy;
 - Important hyperparameters;
@@ -197,6 +210,7 @@ Save representative trained models so that your evaluation can be reproduced.
 Before the final assignment deadline, submit a short experimental checkpoint. The checkpoint is meant to document your expectations and early observations **before you have completed the final analysis**.
 
 Include:
+
 - The BPE vocabulary sizes you chose and why;
 - Your initial hypotheses about how the three tokenizers will behave;
 - The parameter counts of your three models;
@@ -219,6 +233,7 @@ Your hypotheses do not need to be correct. The purpose of the checkpoint is to r
 # Part 3: Evaluation and Analysis (12 points)
 
 Evaluate each model separately on:
+
 - English test data;
 - Turkish test data;
 - Chinese test data.
@@ -240,6 +255,7 @@ You may use another appropriate measure, but explain why it allows comparison ac
 Report results overall and separately for each language.
 
 Then return to your checkpoint. For at least **two of your original hypotheses or questions**:
+
 1. State what you expected;
 2. Report the relevant final results;
 3. Explain whether the results support or contradict your expectation;
@@ -264,6 +280,7 @@ $$p(L \mid t) = \frac{\mathrm{count}(t, L)}{\sum_{L'} \mathrm{count}(t, L')}$$
 You may define your own reasonable criterion for deciding when a token is language-specific or shared.
 
 Use this analysis to investigate a question raised by your checkpoint observations. For example:
+
 - Why does one language produce longer token sequences?
 - Does one language appear to receive more vocabulary capacity?
 - How much do English and Turkish actually share?
@@ -278,6 +295,7 @@ Choose **one pattern from your checkpoint** that you think is especially interes
 Investigate it more carefully using your final results.
 
 Bring together evidence from at least two of the following:
+
 - Token counts;
 - Characters per token;
 - Vocabulary allocation;
@@ -297,6 +315,7 @@ Choose several test sentences that help you investigate one of the patterns iden
 Show the relevant tokenizations and model scores and discuss what might explain the differences.
 
 Useful examples might involve:
+
 - Uncommon words or names;
 - Turkish morphology;
 - Compounds;
@@ -310,6 +329,7 @@ You are not expected to prove that a particular tokenization *caused* a model re
 End your report by returning once more to the main expectations you recorded in your checkpoint.
 
 Briefly summarize:
+
 - One expectation that was supported;
 - One expectation that was not supported, or a result that surprised you;
 - What you think your experiment shows about using a shared tokenizer for English, Turkish, and Chinese;
@@ -324,6 +344,7 @@ Support your conclusions with evidence from your experiments rather than general
 Upload a GitHub URL containing your code and upload your report in Canvas along with your AI log if you used AI tools. We recommend making regular commits to your repository as you work. Your commit history should reflect the development of your work over the course of the assignment and help demonstrate your progress and working process.
 
 Your repository should make it reasonably clear how to:
+
 - Train the tokenizers;
 - Train the models;
 - Evaluate saved models;
@@ -340,6 +361,7 @@ A strong report will not simply contain scores. It will explain the choices you 
 After submission, you may be asked to briefly demonstrate your code and discuss your experiments.
 
 You should be able to:
+
 - Explain the main components of your implementation;
 - Show how one of your reported results was produced;
 - Explain the reasoning behind the experimental choices described in your report;
