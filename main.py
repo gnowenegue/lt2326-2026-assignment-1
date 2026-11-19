@@ -67,7 +67,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from IPython.display import Markdown, display
+from IPython.display import display
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import Whitespace
@@ -111,6 +111,7 @@ os.makedirs(tokenizer_directory, exist_ok=True)
 
 
 character_tokenizer_file = f"{tokenizer_directory}/character-tokenizer.json"
+tokenizer_corpus_file = "./data/tokenizer/balanced.txt"
 
 if os.path.exists(character_tokenizer_file):
     print(f"Tokenizer already exists at {character_tokenizer_file}.")
@@ -118,17 +119,20 @@ if os.path.exists(character_tokenizer_file):
         character_tokenizer_file
     )
 else:
-    character_tokenizer = CharacterTokenizer("./data/tokenizer/balanced.txt")
+    character_tokenizer = CharacterTokenizer(tokenizer_corpus_file)
     character_tokenizer.save(character_tokenizer_file)
 
 print(f"Total vocab size: {len(character_tokenizer.vocab):,d}")
 print(character_tokenizer.vocab[:10])
 
+sample_encoding = character_tokenizer.encode("hello")
+
 print(
-    character_tokenizer.encode("hello").ids,
-    character_tokenizer.encode("hello").tokens,
-    character_tokenizer.decode(character_tokenizer.encode("hello").ids)
+    sample_encoding.ids,
+    sample_encoding.tokens,
+    character_tokenizer.decode(sample_encoding.ids)
 )
+
 print(character_tokenizer.encode("✨").ids, UNK_ID)
 
 
@@ -136,7 +140,6 @@ print(character_tokenizer.encode("✨").ids, UNK_ID)
 # ### BPE Tokenizer
 
 # %%
-# # %%time
 def train_bpe(vocab_size, input_file, output_file):
     if os.path.exists(output_file):
         print(f"Tokenizer already exists at {output_file}. Skip training.")
@@ -156,9 +159,9 @@ def train_bpe(vocab_size, input_file, output_file):
 
 # %%
 bpe_tokenizer_small = train_bpe(
-    BPE_VOCAB_SIZE_SMALL, "./data/tokenizer/balanced.txt", f"{tokenizer_directory}/bpe-tokenizer-small.json")
+    BPE_VOCAB_SIZE_SMALL, tokenizer_corpus_file, f"{tokenizer_directory}/bpe-tokenizer-small.json")
 bpe_tokenizer_big = train_bpe(
-    BPE_VOCAB_SIZE_BIG, "./data/tokenizer/balanced.txt", f"{tokenizer_directory}/bpe-tokenizer-big.json")
+    BPE_VOCAB_SIZE_BIG, tokenizer_corpus_file, f"{tokenizer_directory}/bpe-tokenizer-big.json")
 
 print(f"Small tokenizer's size: {bpe_tokenizer_small.get_vocab_size():,d}")
 print(f"Big tokenizer's size: {bpe_tokenizer_big.get_vocab_size():,d}")
@@ -219,7 +222,7 @@ for tokenizer_name, tokenizer in tokenizers.items():
         total_tokens = len(all_token_ids)
         unique_tokens = len(set(all_token_ids))
         total_characters = sum(len(line) for line in lines)
-        total_unk = sum(1 for token_id in all_token_ids if token_id == UNK_ID)
+        total_unk = all_token_ids.count(UNK_ID)
 
         data.append({
             "Tokenizer": tokenizer_name,
@@ -311,15 +314,8 @@ def create_data_loader(dataset, tokenizer, type="train", shuffle=True, context_l
     for sentences in dataset.values():
         data.extend(sentences)
 
-    # for language in LANGUAGES:
-    #     with open(f"./data/{type}/{language}.txt", "r", encoding="utf-8") as f:
-    #         data.extend([line.strip() for line in f])
-
     print(
         f"Total {type_label} sentences across {len(dataset)} languages: {len(data):,d}")
-    # print(
-    #     f"Total {type_label} sentences across {len(LANGUAGES)} languages: {len(data):,d}"
-    # )
 
     if is_train:
         random.seed(RANDOM_SEED)
@@ -328,7 +324,6 @@ def create_data_loader(dataset, tokenizer, type="train", shuffle=True, context_l
     print(f"Sample {type_label} data: {data[:10]}")
 
     encodings = tokenizer.encode_batch(data)
-    # print(encodings[0], encodings[0].ids, encodings[0].tokens)
     token_ids = []
 
     for encoding in encodings:
@@ -336,9 +331,6 @@ def create_data_loader(dataset, tokenizer, type="train", shuffle=True, context_l
         token_ids.append(EOS_ID)
 
     print(f"Total {type_label} tokens: {len(token_ids):,d}")
-
-    # print(
-    # f"Total {type_label} tokens across {len(LANGUAGES)} languages: {len(token_ids):,d}")
 
     dataset = LMDataset(
         tokens=torch.tensor(token_ids),
@@ -411,14 +403,11 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
 
             optimizer.zero_grad()
             logits = model(x)
-            # print(logits.shape, logits.size(2))
 
             logits_flatten = logits.reshape(-1, logits.size(2))
             targets_flatten = y.reshape(-1)
-            # print(targets_flatten.shape, logits_flatten.shape)
 
             loss = F.cross_entropy(logits_flatten, targets_flatten)
-            # print(loss)
             loss.backward()
             optimizer.step()
 
@@ -457,16 +446,6 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
                     validation_losses.append(average_validation_loss)
 
                 model.train()
-
-        epoch_training_loss = running_training_loss/len(training_data_loader)
-        # training_loss.append(epoch_training_loss)
-        # epoch_validation_loss = running_validation_loss / \
-        # len(validation_data_loader)
-        # validation_loss.append(epoch_validation_loss)
-
-        # print(
-        #     f'Average loss for epoch {epoch + 1}: training = {epoch_training_loss:.4f} | validation = {epoch_validation_loss:.4f}\n'
-        # )
 
     metrics = {
         "training_batches": training_batches,
@@ -594,20 +573,28 @@ display(model_size_df)
 
 plt.figure(figsize=(11, 6))
 
-plt.plot(metrics_char["training_batches"], metrics_char["training_losses"],
-         label="Character (Train)", color="blue", alpha=0.8)
-plt.plot(metrics_char["validation_batches"], metrics_char["validation_losses"],
-         label="Character (Valid)", color="blue", marker="o", linestyle="--")
+plot_configs = [
+    ("Character", metrics_char, "blue", "o"),
+    ("Small BPE", metrics_bpe_small, "orange", "s"),
+    ("Big BPE", metrics_bpe_big, "green", "^"),
+]
 
-plt.plot(metrics_bpe_small["training_batches"], metrics_bpe_small["training_losses"],
-         label="Small BPE (Train)", color="orange", alpha=0.8)
-plt.plot(metrics_bpe_small["validation_batches"], metrics_bpe_small["validation_losses"],
-         label="Small BPE (Valid)", color="orange", marker="s", linestyle="--")
-
-plt.plot(metrics_bpe_big["training_batches"], metrics_bpe_big["training_losses"],
-         label="Big BPE (Train)", color="green", alpha=0.8)
-plt.plot(metrics_bpe_big["validation_batches"], metrics_bpe_big["validation_losses"],
-         label="Big BPE (Valid)", color="green", marker="^", linestyle="--")
+for label, metrics, color, marker in plot_configs:
+    plt.plot(
+        metrics["training_batches"],
+        metrics["training_losses"],
+        label=f"{label} (Train)",
+        color=color,
+        alpha=0.8
+    )
+    plt.plot(
+        metrics["validation_batches"],
+        metrics["validation_losses"],
+        label=f"{label} (Valid)",
+        color=color,
+        marker=marker,
+        linestyle="--"
+    )
 
 plt.xlabel("Optimization Steps (Batches)", fontsize=11)
 plt.ylabel("Cross-Entropy Loss", fontsize=11)
@@ -670,14 +657,6 @@ test_characters = {
     language: sum(len(line) for line in sentences)
     for language, sentences in test_dataset.items()
 }
-# test_characters = {}
-
-# for language in LANGUAGES:
-#     with open(f"./data/test/{language}.txt", encoding="utf-8") as f:
-#         lines = f.readlines()
-#         total_characters = sum(len(line.strip()) for line in lines)
-#         test_characters[language] = total_characters
-#         print(f"{language}: {total_characters} characters")
 
 results = []
 models = {
@@ -742,21 +721,18 @@ def analyze_vocabulary(tokenizer, dataset, threshold=0.9):
     }
 
     for token_id in range(vocab_size):
-        en_count = counts["en"][token_id]
-        tr_count = counts["tr"][token_id]
-        zh_count = counts["zh"][token_id]
-        total = en_count + tr_count + zh_count
+        total = sum(counts[language][token_id] for language in LANGUAGES)
 
         if total == 0:
             stats["Unused"] += 1
-        elif en_count / total >= threshold:
-            stats["English"] += 1
-        elif tr_count / total >= threshold:
-            stats["Turkish"] += 1
-        elif zh_count / total >= threshold:
-            stats["Chinese"] += 1
         else:
-            stats["Shared"] += 1
+            for language in LANGUAGES:
+                if counts[language][token_id] / total >= threshold:
+                    stats[LANGUAGES_LABEL_MAPPING[language]] += 1
+                    break
+            else:
+                # runs only if no language reached the threshold
+                stats["Shared"] += 1
 
     return stats
 
@@ -791,14 +767,13 @@ for language in LANGUAGES:
 
     for model_name, (model, tokenizer) in models.items():
         encoding = tokenizer.encode(sentence)
-        tokens = encoding.tokens
-        ids = encoding.ids
 
         # truncate to context length
-        ids = ids[:CONTEXT_LENGTH]
+        ids = encoding.ids[:CONTEXT_LENGTH]
+        tokens = encoding.tokens[:CONTEXT_LENGTH]
 
-        x = torch.tensor([ids[:-1]]).to(DEVICE)
-        y = torch.tensor([ids[1:]]).to(DEVICE)
+        x = torch.tensor([ids[:-1]], device=DEVICE)
+        y = torch.tensor([ids[1:]], device=DEVICE)
 
         with torch.no_grad():
             logits = model(x)
