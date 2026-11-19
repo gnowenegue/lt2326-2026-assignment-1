@@ -12,8 +12,8 @@ class LMDataset(Dataset):
     def __len__(self):
         return (len(self.tokens) - 1) // self.context_length
 
-    def __getitem__(self, id):
-        start = id * self.context_length
+    def __getitem__(self, idx):
+        start = idx * self.context_length
         chunk = self.tokens[
             start: start + self.context_length + 1
         ]
@@ -31,8 +31,8 @@ if __name__ == "__main__":
     dataset = LMDataset(tokens=tokens, context_length=context_length)
     x, y = dataset[0]
 
-    print(f'size of tokens: {len(tokens)}')
-    print(f'context length: {context_length}')
-    print(f'size of dataset: {len(dataset)}')
-    print(f'x - window 0: {x} of type {x.dtype}')
-    print(f'y - window 0: {y} of type {y.dtype}')
+    print(f"size of tokens: {len(tokens)}")
+    print(f"context length: {context_length}")
+    print(f"size of dataset: {len(dataset)}")
+    print(f"x - window 0: {x} of type {x.dtype}")
+    print(f"y - window 0: {y} of type {y.dtype}")
