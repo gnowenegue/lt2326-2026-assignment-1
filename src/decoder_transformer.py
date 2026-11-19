@@ -96,6 +96,7 @@ class DecoderTransformer(nn.Module):
         super().__init__()
 
         self.vocabulary_size = vocabulary_size
+        self.context_length = CONTEXT_LENGTH
 
         self.embedding = nn.Embedding(
             num_embeddings=vocabulary_size,
