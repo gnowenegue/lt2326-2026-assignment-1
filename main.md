@@ -52,7 +52,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from IPython.display import Markdown, display
+from IPython.display import display
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import Whitespace
@@ -61,7 +61,9 @@ from torch.optim.adamw import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src import (EOS_ID, LANGUAGES, LANGUAGES_LABEL_MAPPING, LOCAL_RUN,
+from src import (BATCH_SIZE, BPE_VOCAB_SIZE_BIG, BPE_VOCAB_SIZE_SMALL,
+                 CONTEXT_LENGTH, EOS_ID, LANGUAGES, LANGUAGES_LABEL_MAPPING,
+                 LEARNING_RATE, LOCAL_RUN, LOCAL_SAMPLE_SIZE, NUM_EPOCHS,
                  RANDOM_SEED, SPECIAL_TOKENS, UNK_ID, UNK_TOKEN,
                  CharacterTokenizer, DecoderTransformer, LMDataset)
 ```
@@ -86,19 +88,20 @@ else:
 print(f"Using device: {DEVICE}")
 ```
 
-    Using device: mps
+    Using device: cuda
 
 
 ### Character-level Tokenizer
 
 
 ```python
-tokenizer_directory = './artifact/tokenizer'
+tokenizer_directory = "./artifact/tokenizer"
 
 os.makedirs(tokenizer_directory, exist_ok=True)
 
 
-character_tokenizer_file = f'{tokenizer_directory}/character-tokenizer.json'
+character_tokenizer_file = f"{tokenizer_directory}/character-tokenizer.json"
+tokenizer_corpus_file = "./data/tokenizer/balanced.txt"
 
 if os.path.exists(character_tokenizer_file):
     print(f"Tokenizer already exists at {character_tokenizer_file}.")
@@ -106,17 +109,20 @@ if os.path.exists(character_tokenizer_file):
         character_tokenizer_file
     )
 else:
-    character_tokenizer = CharacterTokenizer('./data/tokenizer/balanced.txt')
+    character_tokenizer = CharacterTokenizer(tokenizer_corpus_file)
     character_tokenizer.save(character_tokenizer_file)
 
 print(f"Total vocab size: {len(character_tokenizer.vocab):,d}")
 print(character_tokenizer.vocab[:10])
 
+sample_encoding = character_tokenizer.encode("hello")
+
 print(
-    character_tokenizer.encode('hello').ids,
-    character_tokenizer.encode('hello').tokens,
-    character_tokenizer.decode(character_tokenizer.encode('hello').ids)
+    sample_encoding.ids,
+    sample_encoding.tokens,
+    character_tokenizer.decode(sample_encoding.ids)
 )
+
 print(character_tokenizer.encode("✨").ids, UNK_ID)
 ```
 
@@ -130,7 +136,6 @@ print(character_tokenizer.encode("✨").ids, UNK_ID)
 
 
 ```python
-# %%time
 def train_bpe(vocab_size, input_file, output_file):
     if os.path.exists(output_file):
         print(f"Tokenizer already exists at {output_file}. Skip training.")
@@ -151,9 +156,9 @@ def train_bpe(vocab_size, input_file, output_file):
 
 ```python
 bpe_tokenizer_small = train_bpe(
-    10000, './data/tokenizer/balanced.txt', f'{tokenizer_directory}/bpe-tokenizer-small.json')
+    BPE_VOCAB_SIZE_SMALL, tokenizer_corpus_file, f"{tokenizer_directory}/bpe-tokenizer-small.json")
 bpe_tokenizer_big = train_bpe(
-    38500, './data/tokenizer/balanced.txt', f'{tokenizer_directory}/bpe-tokenizer-big.json')
+    BPE_VOCAB_SIZE_BIG, tokenizer_corpus_file, f"{tokenizer_directory}/bpe-tokenizer-big.json")
 
 print(f"Small tokenizer's size: {bpe_tokenizer_small.get_vocab_size():,d}")
 print(f"Big tokenizer's size: {bpe_tokenizer_big.get_vocab_size():,d}")
@@ -182,10 +187,10 @@ I take $7,648 \times 5$ which is $\approx 38,500$. This allows for a large amoun
 def load_dataset(type):
     dataset = {}
     random.seed(RANDOM_SEED)
-    sample_size = 1000 if LOCAL_RUN else None
+    sample_size = LOCAL_SAMPLE_SIZE if LOCAL_RUN else None
 
     for language in LANGUAGES:
-        with open(f'./data/{type}/{language}.txt', 'r', encoding='utf-8') as f:
+        with open(f"./data/{type}/{language}.txt", "r", encoding="utf-8") as f:
             lines = [line.strip() for line in f]
 
             if LOCAL_RUN:
@@ -217,7 +222,7 @@ for tokenizer_name, tokenizer in tokenizers.items():
         total_tokens = len(all_token_ids)
         unique_tokens = len(set(all_token_ids))
         total_characters = sum(len(line) for line in lines)
-        total_unk = sum(1 for token_id in all_token_ids if token_id == UNK_ID)
+        total_unk = all_token_ids.count(UNK_ID)
 
         data.append({
             "Tokenizer": tokenizer_name,
@@ -256,139 +261,139 @@ df.style.format({
 
 <style type="text/css">
 </style>
-<table id="T_046de">
+<table id="T_3ce18">
   <thead>
     <tr>
       <th class="blank level0" >&nbsp;</th>
-      <th id="T_046de_level0_col0" class="col_heading level0 col0" >Tokenizer</th>
-      <th id="T_046de_level0_col1" class="col_heading level0 col1" >Language</th>
-      <th id="T_046de_level0_col2" class="col_heading level0 col2" >Vocabulary Size</th>
-      <th id="T_046de_level0_col3" class="col_heading level0 col3" >Total Tokens</th>
-      <th id="T_046de_level0_col4" class="col_heading level0 col4" >Unique Tokens</th>
-      <th id="T_046de_level0_col5" class="col_heading level0 col5" >Tokens/Sentence</th>
-      <th id="T_046de_level0_col6" class="col_heading level0 col6" >Characters/Token</th>
-      <th id="T_046de_level0_col7" class="col_heading level0 col7" >Total Characters</th>
-      <th id="T_046de_level0_col8" class="col_heading level0 col8" >Total UNK</th>
-      <th id="T_046de_level0_col9" class="col_heading level0 col9" >UNK Rate</th>
+      <th id="T_3ce18_level0_col0" class="col_heading level0 col0" >Tokenizer</th>
+      <th id="T_3ce18_level0_col1" class="col_heading level0 col1" >Language</th>
+      <th id="T_3ce18_level0_col2" class="col_heading level0 col2" >Vocabulary Size</th>
+      <th id="T_3ce18_level0_col3" class="col_heading level0 col3" >Total Tokens</th>
+      <th id="T_3ce18_level0_col4" class="col_heading level0 col4" >Unique Tokens</th>
+      <th id="T_3ce18_level0_col5" class="col_heading level0 col5" >Tokens/Sentence</th>
+      <th id="T_3ce18_level0_col6" class="col_heading level0 col6" >Characters/Token</th>
+      <th id="T_3ce18_level0_col7" class="col_heading level0 col7" >Total Characters</th>
+      <th id="T_3ce18_level0_col8" class="col_heading level0 col8" >Total UNK</th>
+      <th id="T_3ce18_level0_col9" class="col_heading level0 col9" >UNK Rate</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <th id="T_046de_level0_row0" class="row_heading level0 row0" >0</th>
-      <td id="T_046de_row0_col0" class="data row0 col0" >Character Tokenizer</td>
-      <td id="T_046de_row0_col1" class="data row0 col1" >English</td>
-      <td id="T_046de_row0_col2" class="data row0 col2" >7,648</td>
-      <td id="T_046de_row0_col3" class="data row0 col3" >368,269</td>
-      <td id="T_046de_row0_col4" class="data row0 col4" >187</td>
-      <td id="T_046de_row0_col5" class="data row0 col5" >81.12</td>
-      <td id="T_046de_row0_col6" class="data row0 col6" >1.00</td>
-      <td id="T_046de_row0_col7" class="data row0 col7" >368,269</td>
-      <td id="T_046de_row0_col8" class="data row0 col8" >54</td>
-      <td id="T_046de_row0_col9" class="data row0 col9" >0.01%</td>
+      <th id="T_3ce18_level0_row0" class="row_heading level0 row0" >0</th>
+      <td id="T_3ce18_row0_col0" class="data row0 col0" >Character Tokenizer</td>
+      <td id="T_3ce18_row0_col1" class="data row0 col1" >English</td>
+      <td id="T_3ce18_row0_col2" class="data row0 col2" >7,648</td>
+      <td id="T_3ce18_row0_col3" class="data row0 col3" >368,269</td>
+      <td id="T_3ce18_row0_col4" class="data row0 col4" >187</td>
+      <td id="T_3ce18_row0_col5" class="data row0 col5" >81.12</td>
+      <td id="T_3ce18_row0_col6" class="data row0 col6" >1.00</td>
+      <td id="T_3ce18_row0_col7" class="data row0 col7" >368,269</td>
+      <td id="T_3ce18_row0_col8" class="data row0 col8" >54</td>
+      <td id="T_3ce18_row0_col9" class="data row0 col9" >0.01%</td>
     </tr>
     <tr>
-      <th id="T_046de_level0_row1" class="row_heading level0 row1" >1</th>
-      <td id="T_046de_row1_col0" class="data row1 col0" >Character Tokenizer</td>
-      <td id="T_046de_row1_col1" class="data row1 col1" >Turkish</td>
-      <td id="T_046de_row1_col2" class="data row1 col2" >7,648</td>
-      <td id="T_046de_row1_col3" class="data row1 col3" >368,383</td>
-      <td id="T_046de_row1_col4" class="data row1 col4" >221</td>
-      <td id="T_046de_row1_col5" class="data row1 col5" >98.63</td>
-      <td id="T_046de_row1_col6" class="data row1 col6" >1.00</td>
-      <td id="T_046de_row1_col7" class="data row1 col7" >368,383</td>
-      <td id="T_046de_row1_col8" class="data row1 col8" >15</td>
-      <td id="T_046de_row1_col9" class="data row1 col9" >0.00%</td>
+      <th id="T_3ce18_level0_row1" class="row_heading level0 row1" >1</th>
+      <td id="T_3ce18_row1_col0" class="data row1 col0" >Character Tokenizer</td>
+      <td id="T_3ce18_row1_col1" class="data row1 col1" >Turkish</td>
+      <td id="T_3ce18_row1_col2" class="data row1 col2" >7,648</td>
+      <td id="T_3ce18_row1_col3" class="data row1 col3" >368,383</td>
+      <td id="T_3ce18_row1_col4" class="data row1 col4" >221</td>
+      <td id="T_3ce18_row1_col5" class="data row1 col5" >98.63</td>
+      <td id="T_3ce18_row1_col6" class="data row1 col6" >1.00</td>
+      <td id="T_3ce18_row1_col7" class="data row1 col7" >368,383</td>
+      <td id="T_3ce18_row1_col8" class="data row1 col8" >15</td>
+      <td id="T_3ce18_row1_col9" class="data row1 col9" >0.00%</td>
     </tr>
     <tr>
-      <th id="T_046de_level0_row2" class="row_heading level0 row2" >2</th>
-      <td id="T_046de_row2_col0" class="data row2 col0" >Character Tokenizer</td>
-      <td id="T_046de_row2_col1" class="data row2 col1" >Chinese</td>
-      <td id="T_046de_row2_col2" class="data row2 col2" >7,648</td>
-      <td id="T_046de_row2_col3" class="data row2 col3" >368,266</td>
-      <td id="T_046de_row2_col4" class="data row2 col4" >4,526</td>
-      <td id="T_046de_row2_col5" class="data row2 col5" >38.55</td>
-      <td id="T_046de_row2_col6" class="data row2 col6" >1.00</td>
-      <td id="T_046de_row2_col7" class="data row2 col7" >368,266</td>
-      <td id="T_046de_row2_col8" class="data row2 col8" >208</td>
-      <td id="T_046de_row2_col9" class="data row2 col9" >0.06%</td>
+      <th id="T_3ce18_level0_row2" class="row_heading level0 row2" >2</th>
+      <td id="T_3ce18_row2_col0" class="data row2 col0" >Character Tokenizer</td>
+      <td id="T_3ce18_row2_col1" class="data row2 col1" >Chinese</td>
+      <td id="T_3ce18_row2_col2" class="data row2 col2" >7,648</td>
+      <td id="T_3ce18_row2_col3" class="data row2 col3" >368,266</td>
+      <td id="T_3ce18_row2_col4" class="data row2 col4" >4,526</td>
+      <td id="T_3ce18_row2_col5" class="data row2 col5" >38.55</td>
+      <td id="T_3ce18_row2_col6" class="data row2 col6" >1.00</td>
+      <td id="T_3ce18_row2_col7" class="data row2 col7" >368,266</td>
+      <td id="T_3ce18_row2_col8" class="data row2 col8" >208</td>
+      <td id="T_3ce18_row2_col9" class="data row2 col9" >0.06%</td>
     </tr>
     <tr>
-      <th id="T_046de_level0_row3" class="row_heading level0 row3" >3</th>
-      <td id="T_046de_row3_col0" class="data row3 col0" >BPE Tokenizer (small)</td>
-      <td id="T_046de_row3_col1" class="data row3 col1" >English</td>
-      <td id="T_046de_row3_col2" class="data row3 col2" >10,000</td>
-      <td id="T_046de_row3_col3" class="data row3 col3" >131,384</td>
-      <td id="T_046de_row3_col4" class="data row3 col4" >1,450</td>
-      <td id="T_046de_row3_col5" class="data row3 col5" >28.94</td>
-      <td id="T_046de_row3_col6" class="data row3 col6" >2.80</td>
-      <td id="T_046de_row3_col7" class="data row3 col7" >368,269</td>
-      <td id="T_046de_row3_col8" class="data row3 col8" >54</td>
-      <td id="T_046de_row3_col9" class="data row3 col9" >0.04%</td>
+      <th id="T_3ce18_level0_row3" class="row_heading level0 row3" >3</th>
+      <td id="T_3ce18_row3_col0" class="data row3 col0" >BPE Tokenizer (small)</td>
+      <td id="T_3ce18_row3_col1" class="data row3 col1" >English</td>
+      <td id="T_3ce18_row3_col2" class="data row3 col2" >10,000</td>
+      <td id="T_3ce18_row3_col3" class="data row3 col3" >131,384</td>
+      <td id="T_3ce18_row3_col4" class="data row3 col4" >1,450</td>
+      <td id="T_3ce18_row3_col5" class="data row3 col5" >28.94</td>
+      <td id="T_3ce18_row3_col6" class="data row3 col6" >2.80</td>
+      <td id="T_3ce18_row3_col7" class="data row3 col7" >368,269</td>
+      <td id="T_3ce18_row3_col8" class="data row3 col8" >54</td>
+      <td id="T_3ce18_row3_col9" class="data row3 col9" >0.04%</td>
     </tr>
     <tr>
-      <th id="T_046de_level0_row4" class="row_heading level0 row4" >4</th>
-      <td id="T_046de_row4_col0" class="data row4 col0" >BPE Tokenizer (small)</td>
-      <td id="T_046de_row4_col1" class="data row4 col1" >Turkish</td>
-      <td id="T_046de_row4_col2" class="data row4 col2" >10,000</td>
-      <td id="T_046de_row4_col3" class="data row4 col3" >131,597</td>
-      <td id="T_046de_row4_col4" class="data row4 col4" >1,752</td>
-      <td id="T_046de_row4_col5" class="data row4 col5" >35.23</td>
-      <td id="T_046de_row4_col6" class="data row4 col6" >2.80</td>
-      <td id="T_046de_row4_col7" class="data row4 col7" >368,383</td>
-      <td id="T_046de_row4_col8" class="data row4 col8" >15</td>
-      <td id="T_046de_row4_col9" class="data row4 col9" >0.01%</td>
+      <th id="T_3ce18_level0_row4" class="row_heading level0 row4" >4</th>
+      <td id="T_3ce18_row4_col0" class="data row4 col0" >BPE Tokenizer (small)</td>
+      <td id="T_3ce18_row4_col1" class="data row4 col1" >Turkish</td>
+      <td id="T_3ce18_row4_col2" class="data row4 col2" >10,000</td>
+      <td id="T_3ce18_row4_col3" class="data row4 col3" >131,597</td>
+      <td id="T_3ce18_row4_col4" class="data row4 col4" >1,752</td>
+      <td id="T_3ce18_row4_col5" class="data row4 col5" >35.23</td>
+      <td id="T_3ce18_row4_col6" class="data row4 col6" >2.80</td>
+      <td id="T_3ce18_row4_col7" class="data row4 col7" >368,383</td>
+      <td id="T_3ce18_row4_col8" class="data row4 col8" >15</td>
+      <td id="T_3ce18_row4_col9" class="data row4 col9" >0.01%</td>
     </tr>
     <tr>
-      <th id="T_046de_level0_row5" class="row_heading level0 row5" >5</th>
-      <td id="T_046de_row5_col0" class="data row5 col0" >BPE Tokenizer (small)</td>
-      <td id="T_046de_row5_col1" class="data row5 col1" >Chinese</td>
-      <td id="T_046de_row5_col2" class="data row5 col2" >10,000</td>
-      <td id="T_046de_row5_col3" class="data row5 col3" >301,287</td>
-      <td id="T_046de_row5_col4" class="data row5 col4" >6,020</td>
-      <td id="T_046de_row5_col5" class="data row5 col5" >31.54</td>
-      <td id="T_046de_row5_col6" class="data row5 col6" >1.22</td>
-      <td id="T_046de_row5_col7" class="data row5 col7" >368,266</td>
-      <td id="T_046de_row5_col8" class="data row5 col8" >208</td>
-      <td id="T_046de_row5_col9" class="data row5 col9" >0.07%</td>
+      <th id="T_3ce18_level0_row5" class="row_heading level0 row5" >5</th>
+      <td id="T_3ce18_row5_col0" class="data row5 col0" >BPE Tokenizer (small)</td>
+      <td id="T_3ce18_row5_col1" class="data row5 col1" >Chinese</td>
+      <td id="T_3ce18_row5_col2" class="data row5 col2" >10,000</td>
+      <td id="T_3ce18_row5_col3" class="data row5 col3" >301,287</td>
+      <td id="T_3ce18_row5_col4" class="data row5 col4" >6,020</td>
+      <td id="T_3ce18_row5_col5" class="data row5 col5" >31.54</td>
+      <td id="T_3ce18_row5_col6" class="data row5 col6" >1.22</td>
+      <td id="T_3ce18_row5_col7" class="data row5 col7" >368,266</td>
+      <td id="T_3ce18_row5_col8" class="data row5 col8" >208</td>
+      <td id="T_3ce18_row5_col9" class="data row5 col9" >0.07%</td>
     </tr>
     <tr>
-      <th id="T_046de_level0_row6" class="row_heading level0 row6" >6</th>
-      <td id="T_046de_row6_col0" class="data row6 col0" >BPE Tokenizer (big)</td>
-      <td id="T_046de_row6_col1" class="data row6 col1" >English</td>
-      <td id="T_046de_row6_col2" class="data row6 col2" >38,500</td>
-      <td id="T_046de_row6_col3" class="data row6 col3" >91,195</td>
-      <td id="T_046de_row6_col4" class="data row6 col4" >8,462</td>
-      <td id="T_046de_row6_col5" class="data row6 col5" >20.09</td>
-      <td id="T_046de_row6_col6" class="data row6 col6" >4.04</td>
-      <td id="T_046de_row6_col7" class="data row6 col7" >368,269</td>
-      <td id="T_046de_row6_col8" class="data row6 col8" >54</td>
-      <td id="T_046de_row6_col9" class="data row6 col9" >0.06%</td>
+      <th id="T_3ce18_level0_row6" class="row_heading level0 row6" >6</th>
+      <td id="T_3ce18_row6_col0" class="data row6 col0" >BPE Tokenizer (big)</td>
+      <td id="T_3ce18_row6_col1" class="data row6 col1" >English</td>
+      <td id="T_3ce18_row6_col2" class="data row6 col2" >38,500</td>
+      <td id="T_3ce18_row6_col3" class="data row6 col3" >91,195</td>
+      <td id="T_3ce18_row6_col4" class="data row6 col4" >8,462</td>
+      <td id="T_3ce18_row6_col5" class="data row6 col5" >20.09</td>
+      <td id="T_3ce18_row6_col6" class="data row6 col6" >4.04</td>
+      <td id="T_3ce18_row6_col7" class="data row6 col7" >368,269</td>
+      <td id="T_3ce18_row6_col8" class="data row6 col8" >54</td>
+      <td id="T_3ce18_row6_col9" class="data row6 col9" >0.06%</td>
     </tr>
     <tr>
-      <th id="T_046de_level0_row7" class="row_heading level0 row7" >7</th>
-      <td id="T_046de_row7_col0" class="data row7 col0" >BPE Tokenizer (big)</td>
-      <td id="T_046de_row7_col1" class="data row7 col1" >Turkish</td>
-      <td id="T_046de_row7_col2" class="data row7 col2" >38,500</td>
-      <td id="T_046de_row7_col3" class="data row7 col3" >86,829</td>
-      <td id="T_046de_row7_col4" class="data row7 col4" >9,955</td>
-      <td id="T_046de_row7_col5" class="data row7 col5" >23.25</td>
-      <td id="T_046de_row7_col6" class="data row7 col6" >4.24</td>
-      <td id="T_046de_row7_col7" class="data row7 col7" >368,383</td>
-      <td id="T_046de_row7_col8" class="data row7 col8" >15</td>
-      <td id="T_046de_row7_col9" class="data row7 col9" >0.02%</td>
+      <th id="T_3ce18_level0_row7" class="row_heading level0 row7" >7</th>
+      <td id="T_3ce18_row7_col0" class="data row7 col0" >BPE Tokenizer (big)</td>
+      <td id="T_3ce18_row7_col1" class="data row7 col1" >Turkish</td>
+      <td id="T_3ce18_row7_col2" class="data row7 col2" >38,500</td>
+      <td id="T_3ce18_row7_col3" class="data row7 col3" >86,829</td>
+      <td id="T_3ce18_row7_col4" class="data row7 col4" >9,955</td>
+      <td id="T_3ce18_row7_col5" class="data row7 col5" >23.25</td>
+      <td id="T_3ce18_row7_col6" class="data row7 col6" >4.24</td>
+      <td id="T_3ce18_row7_col7" class="data row7 col7" >368,383</td>
+      <td id="T_3ce18_row7_col8" class="data row7 col8" >15</td>
+      <td id="T_3ce18_row7_col9" class="data row7 col9" >0.02%</td>
     </tr>
     <tr>
-      <th id="T_046de_level0_row8" class="row_heading level0 row8" >8</th>
-      <td id="T_046de_row8_col0" class="data row8 col0" >BPE Tokenizer (big)</td>
-      <td id="T_046de_row8_col1" class="data row8 col1" >Chinese</td>
-      <td id="T_046de_row8_col2" class="data row8 col2" >38,500</td>
-      <td id="T_046de_row8_col3" class="data row8 col3" >229,022</td>
-      <td id="T_046de_row8_col4" class="data row8 col4" >19,732</td>
-      <td id="T_046de_row8_col5" class="data row8 col5" >23.97</td>
-      <td id="T_046de_row8_col6" class="data row8 col6" >1.61</td>
-      <td id="T_046de_row8_col7" class="data row8 col7" >368,266</td>
-      <td id="T_046de_row8_col8" class="data row8 col8" >208</td>
-      <td id="T_046de_row8_col9" class="data row8 col9" >0.09%</td>
+      <th id="T_3ce18_level0_row8" class="row_heading level0 row8" >8</th>
+      <td id="T_3ce18_row8_col0" class="data row8 col0" >BPE Tokenizer (big)</td>
+      <td id="T_3ce18_row8_col1" class="data row8 col1" >Chinese</td>
+      <td id="T_3ce18_row8_col2" class="data row8 col2" >38,500</td>
+      <td id="T_3ce18_row8_col3" class="data row8 col3" >229,022</td>
+      <td id="T_3ce18_row8_col4" class="data row8 col4" >19,732</td>
+      <td id="T_3ce18_row8_col5" class="data row8 col5" >23.97</td>
+      <td id="T_3ce18_row8_col6" class="data row8 col6" >1.61</td>
+      <td id="T_3ce18_row8_col7" class="data row8 col7" >368,266</td>
+      <td id="T_3ce18_row8_col8" class="data row8 col8" >208</td>
+      <td id="T_3ce18_row8_col9" class="data row8 col9" >0.09%</td>
     </tr>
   </tbody>
 </table>
@@ -411,14 +416,14 @@ samples = {
 }
 
 for language, sample in samples.items():
-    print('=' * 10, f'{LANGUAGES_LABEL_MAPPING[language].upper()}', '=' * 10)
+    print("=" * 10, f"{LANGUAGES_LABEL_MAPPING[language].upper()}", "=" * 10)
     print(sample)
     print(f"Character Tokenizer:\n{character_tokenizer.encode(sample).tokens}")
     print(
         f"BPE Tokenizer (small):\n{bpe_tokenizer_small.encode(sample).tokens}"
     )
     print(f"BPE Tokenizer (big):\n{bpe_tokenizer_big.encode(sample).tokens}")
-    print('\n', '-' * 50, '\n')
+    print("\n", "-" * 50, "\n")
 ```
 
     ========== ENGLISH ==========
@@ -476,28 +481,21 @@ For both small and big versions of the BPE Tokenizers, we can see that the Chine
 ```python
 train_dataset = {}
 for language in LANGUAGES:
-    with open(f'./data/train/{language}.txt', 'r', encoding='utf-8') as f:
+    with open(f"./data/train/{language}.txt", "r", encoding="utf-8") as f:
         train_dataset[language] = [line.strip() for line in f]
 
 
-def create_data_loader(dataset, tokenizer, type='train', shuffle=True, context_length=128, batch_size=32):
-    type_label = 'validation' if type == 'valid' else f'{type}ing'
-    is_train = type == 'train'
+def create_data_loader(dataset, tokenizer, type="train", shuffle=True, context_length=CONTEXT_LENGTH, batch_size=BATCH_SIZE):
+    type_label = "validation" if type == "valid" else f"{type}ing"
+    is_train = type == "train"
 
     data = []
 
     for sentences in dataset.values():
         data.extend(sentences)
 
-    # for language in LANGUAGES:
-    #     with open(f'./data/{type}/{language}.txt', 'r', encoding='utf-8') as f:
-    #         data.extend([line.strip() for line in f])
-
     print(
         f"Total {type_label} sentences across {len(dataset)} languages: {len(data):,d}")
-    # print(
-    #     f"Total {type_label} sentences across {len(LANGUAGES)} languages: {len(data):,d}"
-    # )
 
     if is_train:
         random.seed(RANDOM_SEED)
@@ -506,7 +504,6 @@ def create_data_loader(dataset, tokenizer, type='train', shuffle=True, context_l
     print(f"Sample {type_label} data: {data[:10]}")
 
     encodings = tokenizer.encode_batch(data)
-    # print(encodings[0], encodings[0].ids, encodings[0].tokens)
     token_ids = []
 
     for encoding in encodings:
@@ -514,9 +511,6 @@ def create_data_loader(dataset, tokenizer, type='train', shuffle=True, context_l
         token_ids.append(EOS_ID)
 
     print(f"Total {type_label} tokens: {len(token_ids):,d}")
-
-    # print(
-    # f"Total {type_label} tokens across {len(LANGUAGES)} languages: {len(token_ids):,d}")
 
     dataset = LMDataset(
         tokens=torch.tensor(token_ids),
@@ -606,7 +600,7 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
     model = DecoderTransformer(vocabulary_size=tokenizer.get_vocab_size())
     model = model.to(DEVICE)
 
-    optimizer = AdamW(model.parameters(), lr=0.0001)
+    optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
 
     training_batches = []
     training_losses = []
@@ -615,16 +609,14 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
 
     validation_interval = len(training_data_loader) // 4
 
-    NUM_EPOCH = 1
-
-    for epoch in range(NUM_EPOCH):
+    for epoch in range(NUM_EPOCHS):
         model.train()
 
         running_training_loss = 0.0
 
         training_progress_bar = tqdm(
             training_data_loader,
-            f"[Training] Epoch {epoch + 1} / {NUM_EPOCH}"
+            f"[Training] Epoch {epoch + 1} / {NUM_EPOCHS}"
         )
 
         for batch, (x, y) in enumerate(training_progress_bar, 1):
@@ -633,14 +625,11 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
 
             optimizer.zero_grad()
             logits = model(x)
-            # print(logits.shape, logits.size(2))
 
             logits_flatten = logits.reshape(-1, logits.size(2))
             targets_flatten = y.reshape(-1)
-            # print(targets_flatten.shape, logits_flatten.shape)
 
             loss = F.cross_entropy(logits_flatten, targets_flatten)
-            # print(loss)
             loss.backward()
             optimizer.step()
 
@@ -658,7 +647,7 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
                 running_validation_loss = 0.0
                 validation_progress_bar = tqdm(
                     validation_data_loader,
-                    f"[Validation] Epoch {epoch + 1} / {NUM_EPOCH}"
+                    f"[Validation] Epoch {epoch + 1} / {NUM_EPOCHS}"
                 )
 
                 with torch.no_grad():
@@ -679,16 +668,6 @@ def train_and_validate(tokenizer, training_data_loader, validation_data_loader):
                     validation_losses.append(average_validation_loss)
 
                 model.train()
-
-        epoch_training_loss = running_training_loss/len(training_data_loader)
-        # training_loss.append(epoch_training_loss)
-        # epoch_validation_loss = running_validation_loss / \
-        # len(validation_data_loader)
-        # validation_loss.append(epoch_validation_loss)
-
-        # print(
-        #     f'Average loss for epoch {epoch + 1}: training = {epoch_training_loss:.4f} | validation = {epoch_validation_loss:.4f}\n'
-        # )
 
     metrics = {
         "training_batches": training_batches,
@@ -756,12 +735,12 @@ model_char, metrics_char = train_validate_and_save(
     Training model for Character Tokenizer...
 
 
-    [Validation] Epoch 1 / 1: 100%|██████████| 275/275 [00:08<00:00, 30.94it/s, avg_loss=9.2353, batch_loss=19.2141] 
-    [Validation] Epoch 1 / 1: 100%|██████████| 275/275 [00:09<00:00, 29.29it/s, avg_loss=6.3722, batch_loss=11.9689]  
-    [Validation] Epoch 1 / 1: 100%|██████████| 275/275 [00:08<00:00, 33.14it/s, avg_loss=5.1609, batch_loss=8.9390]]
-    [Validation] Epoch 1 / 1: 100%|██████████| 275/275 [00:08<00:00, 33.31it/s, avg_loss=4.6596, batch_loss=7.6862]]
-    [Validation] Epoch 1 / 1: 100%|██████████| 275/275 [00:08<00:00, 33.10it/s, avg_loss=4.6877, batch_loss=7.6978]]
-    [Training] Epoch 1 / 1: 100%|██████████| 2193/2193 [04:21<00:00,  8.40it/s, avg_loss=10.7706, batch_loss=6.4519]
+    [Validation] Epoch 1 / 1: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 275/275 [00:01<00:00, 184.62it/s, avg_loss=8.9658, batch_loss=18.1569]
+    [Validation] Epoch 1 / 1: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 275/275 [00:01<00:00, 179.68it/s, avg_loss=6.2250, batch_loss=11.3507]
+    [Validation] Epoch 1 / 1: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 275/275 [00:01<00:00, 178.17it/s, avg_loss=5.1334, batch_loss=8.8235]
+    [Validation] Epoch 1 / 1: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 275/275 [00:01<00:00, 179.23it/s, avg_loss=4.6657, batch_loss=7.7276]
+    [Validation] Epoch 1 / 1: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 275/275 [00:01<00:00, 180.41it/s, avg_loss=4.6676, batch_loss=7.7434]
+    [Training] Epoch 1 / 1: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2193/2193 [00:41<00:00, 53.07it/s, avg_loss=10.6760, batch_loss=5.1993]
 
 
     Model saved to ./artifact/model/model_char.pth
@@ -787,20 +766,18 @@ model_bpe_small, metrics_bpe_small = train_validate_and_save(
     Training model for BPE Tokenizer (small)...
 
 
-    [Validation] Epoch 1 / 1: 100%|██████████| 143/143 [00:05<00:00, 24.38it/s, avg_loss=24.1814, batch_loss=23.2273]
-    [Validation] Epoch 1 / 1: 100%|██████████| 143/143 [00:05<00:00, 26.16it/s, avg_loss=17.1871, batch_loss=16.4229]
-    [Validation] Epoch 1 / 1: 100%|██████████| 143/143 [00:05<00:00, 25.75it/s, avg_loss=13.4209, batch_loss=12.8750]
-    [Validation] Epoch 1 / 1: 100%|██████████| 143/143 [00:06<00:00, 23.39it/s, avg_loss=11.1670, batch_loss=10.8668]
-    [Validation] Epoch 1 / 1: 100%|██████████| 143/143 [00:05<00:00, 24.13it/s, avg_loss=11.1320, batch_loss=10.8821]
-    [Training] Epoch 1 / 1: 100%|██████████| 1134/1134 [02:45<00:00,  6.84it/s, avg_loss=25.5932, batch_loss=13.2682]
+    [Validation] Epoch 1 / 1: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 143/143 [00:00<00:00, 158.33it/s, avg_loss=24.0972, batch_loss=24.8402]
+    [Validation] Epoch 1 / 1: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 143/143 [00:00<00:00, 162.74it/s, avg_loss=16.8798, batch_loss=17.7150]
+    [Validation] Epoch 1 / 1: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 143/143 [00:00<00:00, 162.59it/s, avg_loss=13.2033, batch_loss=14.0094]
+    [Validation] Epoch 1 / 1: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 143/143 [00:00<00:00, 162.42it/s, avg_loss=11.2154, batch_loss=11.9404]
+    [Validation] Epoch 1 / 1: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 143/143 [00:00<00:00, 162.57it/s, avg_loss=11.2142, batch_loss=11.9229]
+    [Training] Epoch 1 / 1: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1134/1134 [00:24<00:00, 46.71it/s, avg_loss=25.7277, batch_loss=13.7204]
+
 
     Model saved to ./artifact/model/model_bpe_small.pth
     Metrics saved to ./artifact/model/metrics_bpe_small.json
     --------------------------------------------------
     ==================================================
-
-
-    
 
 
 
@@ -820,19 +797,17 @@ model_bpe_big, metrics_bpe_big = train_validate_and_save(
     Training model for BPE Tokenizer (big)...
 
 
-    [Validation] Epoch 1 / 1: 100%|██████████| 104/104 [00:15<00:00,  6.85it/s, avg_loss=33.8729, batch_loss=34.1144]
-    [Validation] Epoch 1 / 1: 100%|██████████| 104/104 [00:15<00:00,  6.83it/s, avg_loss=27.1536, batch_loss=27.4789]
-    [Validation] Epoch 1 / 1: 100%|██████████| 104/104 [00:16<00:00,  6.16it/s, avg_loss=22.4697, batch_loss=22.8231]
-    [Validation] Epoch 1 / 1: 100%|██████████| 104/104 [00:16<00:00,  6.32it/s, avg_loss=19.2159, batch_loss=19.6037]
-    [Training] Epoch 1 / 1: 100%|██████████| 820/820 [13:44<00:00,  1.01s/it, avg_loss=35.5131, batch_loss=22.3631]
+    [Validation] Epoch 1 / 1: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 104/104 [00:01<00:00, 65.95it/s, avg_loss=33.2957, batch_loss=33.5710]
+    [Validation] Epoch 1 / 1: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 104/104 [00:01<00:00, 65.73it/s, avg_loss=26.8872, batch_loss=27.0656]
+    [Validation] Epoch 1 / 1: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 104/104 [00:01<00:00, 65.85it/s, avg_loss=22.6169, batch_loss=22.8099]
+    [Validation] Epoch 1 / 1: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 104/104 [00:01<00:00, 65.56it/s, avg_loss=19.4135, batch_loss=19.5495]
+    [Training] Epoch 1 / 1: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 820/820 [00:41<00:00, 19.78it/s, avg_loss=35.3253, batch_loss=22.3962]
+
 
     Model saved to ./artifact/model/model_bpe_big.pth
     Metrics saved to ./artifact/model/metrics_bpe_big.json
     --------------------------------------------------
     ==================================================
-
-
-    
 
 
 ### Fair Comparisons
@@ -948,20 +923,28 @@ display(model_size_df)
 
 plt.figure(figsize=(11, 6))
 
-plt.plot(metrics_char["training_batches"], metrics_char["training_losses"],
-         label="Character (Train)", color="blue", alpha=0.8)
-plt.plot(metrics_char["validation_batches"], metrics_char["validation_losses"],
-         label="Character (Valid)", color="blue", marker="o", linestyle="--")
+plot_configs = [
+    ("Character", metrics_char, "blue", "o"),
+    ("Small BPE", metrics_bpe_small, "orange", "s"),
+    ("Big BPE", metrics_bpe_big, "green", "^"),
+]
 
-plt.plot(metrics_bpe_small["training_batches"], metrics_bpe_small["training_losses"],
-         label="Small BPE (Train)", color="orange", alpha=0.8)
-plt.plot(metrics_bpe_small["validation_batches"], metrics_bpe_small["validation_losses"],
-         label="Small BPE (Valid)", color="orange", marker="s", linestyle="--")
-
-plt.plot(metrics_bpe_big["training_batches"], metrics_bpe_big["training_losses"],
-         label="Big BPE (Train)", color="green", alpha=0.8)
-plt.plot(metrics_bpe_big["validation_batches"], metrics_bpe_big["validation_losses"],
-         label="Big BPE (Valid)", color="green", marker="^", linestyle="--")
+for label, metrics, color, marker in plot_configs:
+    plt.plot(
+        metrics["training_batches"],
+        metrics["training_losses"],
+        label=f"{label} (Train)",
+        color=color,
+        alpha=0.8
+    )
+    plt.plot(
+        metrics["validation_batches"],
+        metrics["validation_losses"],
+        label=f"{label} (Valid)",
+        color=color,
+        marker=marker,
+        linestyle="--"
+    )
 
 plt.xlabel("Optimization Steps (Batches)", fontsize=11)
 plt.ylabel("Cross-Entropy Loss", fontsize=11)
@@ -999,6 +982,8 @@ We also enabled weight tying between the input embedding and the output layer to
 
 ### Comparing Models
 
+We have decided to use Bits Per Character (BPC) as our metric for comparing the models. BPC is a measure of the average number of bits required to represent a character in a given text. This directly solves the problem of ordinary token-level perplexity is not directly comparable between models using different tokenizers because each tokenizer breaks down the text into a different number of tokens.
+
 
 ```python
 def compute_bpc(model, data_loader, total_characters):
@@ -1030,14 +1015,6 @@ test_characters = {
     language: sum(len(line) for line in sentences)
     for language, sentences in test_dataset.items()
 }
-# test_characters = {}
-
-# for language in LANGUAGES:
-#     with open(f"./data/test/{language}.txt", encoding="utf-8") as f:
-#         lines = f.readlines()
-#         total_characters = sum(len(line.strip()) for line in lines)
-#         test_characters[language] = total_characters
-#         print(f"{language}: {total_characters} characters")
 
 results = []
 models = {
@@ -1124,55 +1101,55 @@ display(results_df)
       <th>0</th>
       <td>Character</td>
       <td>English</td>
-      <td>4.1767</td>
+      <td>4.0764</td>
     </tr>
     <tr>
       <th>1</th>
       <td>Character</td>
       <td>Turkish</td>
-      <td>4.2701</td>
+      <td>4.2446</td>
     </tr>
     <tr>
       <th>2</th>
       <td>Character</td>
       <td>Chinese</td>
-      <td>12.1286</td>
+      <td>12.1523</td>
     </tr>
     <tr>
       <th>3</th>
       <td>BPE (small)</td>
       <td>English</td>
-      <td>5.2513</td>
+      <td>5.2179</td>
     </tr>
     <tr>
       <th>4</th>
       <td>BPE (small)</td>
       <td>Turkish</td>
-      <td>5.7950</td>
+      <td>5.9212</td>
     </tr>
     <tr>
       <th>5</th>
       <td>BPE (small)</td>
       <td>Chinese</td>
-      <td>14.3377</td>
+      <td>14.4667</td>
     </tr>
     <tr>
       <th>6</th>
       <td>BPE (big)</td>
       <td>English</td>
-      <td>6.5918</td>
+      <td>6.5895</td>
     </tr>
     <tr>
       <th>7</th>
       <td>BPE (big)</td>
       <td>Turkish</td>
-      <td>7.0698</td>
+      <td>7.2189</td>
     </tr>
     <tr>
       <th>8</th>
       <td>BPE (big)</td>
       <td>Chinese</td>
-      <td>18.2671</td>
+      <td>18.5594</td>
     </tr>
   </tbody>
 </table>
@@ -1223,21 +1200,18 @@ def analyze_vocabulary(tokenizer, dataset, threshold=0.9):
     }
 
     for token_id in range(vocab_size):
-        en_count = counts["en"][token_id]
-        tr_count = counts["tr"][token_id]
-        zh_count = counts["zh"][token_id]
-        total = en_count + tr_count + zh_count
+        total = sum(counts[language][token_id] for language in LANGUAGES)
 
         if total == 0:
             stats["Unused"] += 1
-        elif en_count / total >= threshold:
-            stats["English"] += 1
-        elif tr_count / total >= threshold:
-            stats["Turkish"] += 1
-        elif zh_count / total >= threshold:
-            stats["Chinese"] += 1
         else:
-            stats["Shared"] += 1
+            for language in LANGUAGES:
+                if counts[language][token_id] / total >= threshold:
+                    stats[LANGUAGES_LABEL_MAPPING[language]] += 1
+                    break
+            else:
+                # runs only if no language reached the threshold
+                stats["Shared"] += 1
 
     return stats
 
@@ -1318,7 +1292,100 @@ display(vocabulary_results_df)
 </div>
 
 
+#### BPE increment from Character
+
+
+```python
+columns = ["English", "Turkish", "Chinese", "Shared"]
+character_stats = vocabulary_results[0]
+merges_data = []
+
+for stat in vocabulary_results[1:]:
+    diff = {
+        column: stat[column] - character_stats[column]
+        for column in columns
+    }
+    total = sum(diff.values())
+
+    row = {"Tokenizer": stat["Tokenizer"]}
+    for column, count in diff.items():
+        row[column] = f"{count:,d} ({count / total:.2%})"
+    row["Total"] = f"{total:,d}"
+
+    merges_data.append(row)
+
+merges_df = pd.DataFrame(merges_data)
+display(merges_df)
+```
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Tokenizer</th>
+      <th>English</th>
+      <th>Turkish</th>
+      <th>Chinese</th>
+      <th>Shared</th>
+      <th>Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>BPE Tokenizer (small)</td>
+      <td>359 (15.26%)</td>
+      <td>622 (26.45%)</td>
+      <td>582 (24.74%)</td>
+      <td>789 (33.55%)</td>
+      <td>2,352</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>BPE Tokenizer (big)</td>
+      <td>4,020 (13.13%)</td>
+      <td>6,712 (21.92%)</td>
+      <td>13,861 (45.27%)</td>
+      <td>6,026 (19.68%)</td>
+      <td>30,619</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+1. For the Character Tokenizer, it started off with $7,648$ unique characters. Chinese alone took up more than $7,000$ of them. This again reinforces what was previously mentioned that Chinese characters are tokens with meaning on their own as they do not make up with alphabet. This results in a very large vocabulary size.
+2. Chinese does most of the merges as the slots of merges increases. In BPE (small), the merges are spread out with the shared tokens being the most. In BPE (large), the merges are more concentrated in Chinese.
+3. Despite English and Turkish both use Latin alphabets, Turkish has more merges than English ($6,712$ vs $4,020$ in BPE - big). For both BPE (small) and BPE (large), English has the least number of merges.
+
 ### Relating Tokenization to Model Behavior
+
+#### Hypothesis 1
+
+We expected BPE (small) would perform best among the tokenizers.
+
+But from the BPC scores, Character Tokenizer performed best across all the languages. This might be due to the fact that we have fixed the training to 1 epoch and since the character tokenizer creates more tokens for the same sentence, it might have been able to learn the language better in one epoch.
+
+#### Hypothesis 2
+
+We expected Turkish to use most tokens.
+
+This is mostly true. If we look at the Tokens/Sentence metrics, Turkish has the highest score for Character Tokenizer and BPE (small). But in BPE (big), it barely falls behind Chinese.
 
 ### Error Analysis
 
@@ -1336,14 +1403,13 @@ for language in LANGUAGES:
 
     for model_name, (model, tokenizer) in models.items():
         encoding = tokenizer.encode(sentence)
-        tokens = encoding.tokens
-        ids = encoding.ids
 
-        # truncate to 128 context length
-        ids = ids[:128]
+        # truncate to context length
+        ids = encoding.ids[:CONTEXT_LENGTH]
+        tokens = encoding.tokens[:CONTEXT_LENGTH]
 
-        x = torch.tensor([ids[:-1]]).to(DEVICE)
-        y = torch.tensor([ids[1:]]).to(DEVICE)
+        x = torch.tensor([ids[:-1]], device=DEVICE)
+        y = torch.tensor([ids[1:]], device=DEVICE)
 
         with torch.no_grad():
             logits = model(x)
@@ -1361,13 +1427,13 @@ for language in LANGUAGES:
     Sentence: They were also easy to catch (because they were relatively slow swimmers) and they floated on the surface of the water after being killed.
     --------------------------------------------------
     
-    Character (138 tokens, Loss: 2.7495):
-    Tokens: ['T', 'h', 'e', 'y', ' ', 'w', 'e', 'r', 'e', ' ', 'a', 'l', 's', 'o', ' ', 'e', 'a', 's', 'y', ' ', 't', 'o', ' ', 'c', 'a', 't', 'c', 'h', ' ', '(', 'b', 'e', 'c', 'a', 'u', 's', 'e', ' ', 't', 'h', 'e', 'y', ' ', 'w', 'e', 'r', 'e', ' ', 'r', 'e', 'l', 'a', 't', 'i', 'v', 'e', 'l', 'y', ' ', 's', 'l', 'o', 'w', ' ', 's', 'w', 'i', 'm', 'm', 'e', 'r', 's', ')', ' ', 'a', 'n', 'd', ' ', 't', 'h', 'e', 'y', ' ', 'f', 'l', 'o', 'a', 't', 'e', 'd', ' ', 'o', 'n', ' ', 't', 'h', 'e', ' ', 's', 'u', 'r', 'f', 'a', 'c', 'e', ' ', 'o', 'f', ' ', 't', 'h', 'e', ' ', 'w', 'a', 't', 'e', 'r', ' ', 'a', 'f', 't', 'e', 'r', ' ', 'b', 'e', 'i', 'n', 'g', ' ', 'k', 'i', 'l', 'l', 'e', 'd', '.']
+    Character (128 tokens, Loss: 2.7110):
+    Tokens: ['T', 'h', 'e', 'y', ' ', 'w', 'e', 'r', 'e', ' ', 'a', 'l', 's', 'o', ' ', 'e', 'a', 's', 'y', ' ', 't', 'o', ' ', 'c', 'a', 't', 'c', 'h', ' ', '(', 'b', 'e', 'c', 'a', 'u', 's', 'e', ' ', 't', 'h', 'e', 'y', ' ', 'w', 'e', 'r', 'e', ' ', 'r', 'e', 'l', 'a', 't', 'i', 'v', 'e', 'l', 'y', ' ', 's', 'l', 'o', 'w', ' ', 's', 'w', 'i', 'm', 'm', 'e', 'r', 's', ')', ' ', 'a', 'n', 'd', ' ', 't', 'h', 'e', 'y', ' ', 'f', 'l', 'o', 'a', 't', 'e', 'd', ' ', 'o', 'n', ' ', 't', 'h', 'e', ' ', 's', 'u', 'r', 'f', 'a', 'c', 'e', ' ', 'o', 'f', ' ', 't', 'h', 'e', ' ', 'w', 'a', 't', 'e', 'r', ' ', 'a', 'f', 't', 'e', 'r', ' ', 'b', 'e', 'i']
     
-    BPE (small) (44 tokens, Loss: 8.8582):
+    BPE (small) (44 tokens, Loss: 8.8036):
     Tokens: ['They', 'were', 'also', 'e', 'as', 'y', 'to', 'c', 'at', 'ch', '(', 'because', 'they', 'were', 'rel', 'at', 'iv', 'ely', 's', 'low', 's', 'w', 'im', 'm', 'ers', ')', 'and', 'they', 'f', 'lo', 'ated', 'on', 'the', 'sur', 'f', 'ace', 'of', 'the', 'water', 'after', 'being', 'kill', 'ed', '.']
     
-    BPE (big) (29 tokens, Loss: 18.6405):
+    BPE (big) (29 tokens, Loss: 16.9606):
     Tokens: ['They', 'were', 'also', 'easy', 'to', 'catch', '(', 'because', 'they', 'were', 'relatively', 'slow', 'swim', 'mers', ')', 'and', 'they', 'flo', 'ated', 'on', 'the', 'surface', 'of', 'the', 'water', 'after', 'being', 'killed', '.']
     ==================================================
     
@@ -1376,13 +1442,13 @@ for language in LANGUAGES:
     Sentence: Sanık avukatı ise Sayın Başkan düzeni sağlayamayacaksanız ben savunma yapmayacağım" dedi.
     --------------------------------------------------
     
-    Character (89 tokens, Loss: 2.7359):
+    Character (89 tokens, Loss: 2.8524):
     Tokens: ['S', 'a', 'n', 'ı', 'k', ' ', 'a', 'v', 'u', 'k', 'a', 't', 'ı', ' ', 'i', 's', 'e', ' ', 'S', 'a', 'y', 'ı', 'n', ' ', 'B', 'a', 'ş', 'k', 'a', 'n', ' ', 'd', 'ü', 'z', 'e', 'n', 'i', ' ', 's', 'a', 'ğ', 'l', 'a', 'y', 'a', 'm', 'a', 'y', 'a', 'c', 'a', 'k', 's', 'a', 'n', 'ı', 'z', ' ', 'b', 'e', 'n', ' ', 's', 'a', 'v', 'u', 'n', 'm', 'a', ' ', 'y', 'a', 'p', 'm', 'a', 'y', 'a', 'c', 'a', 'ğ', 'ı', 'm', '"', ' ', 'd', 'e', 'd', 'i', '.']
     
-    BPE (small) (34 tokens, Loss: 11.4870):
+    BPE (small) (34 tokens, Loss: 14.0277):
     Tokens: ['San', 'ık', 'av', 'u', 'kat', 'ı', 'ise', 'S', 'ay', 'ın', 'Baş', 'kan', 'düzen', 'i', 'sağ', 'lay', 'am', 'ay', 'acak', 'san', 'ız', 'ben', 'sav', 'un', 'ma', 'yap', 'may', 'ac', 'ağ', 'ım', '"', 'd', 'edi', '.']
     
-    BPE (big) (23 tokens, Loss: 24.7971):
+    BPE (big) (23 tokens, Loss: 25.9185):
     Tokens: ['San', 'ık', 'avu', 'katı', 'ise', 'S', 'ayın', 'Başkan', 'düzeni', 'sağlay', 'amay', 'acak', 'san', 'ız', 'ben', 'savunma', 'yap', 'may', 'acağ', 'ım', '"', 'dedi', '.']
     ==================================================
     
@@ -1391,18 +1457,24 @@ for language in LANGUAGES:
     Sentence: 同名的漫画版由日本漫画家Asaki负责漫画。
     --------------------------------------------------
     
-    Character (22 tokens, Loss: 7.1733):
+    Character (22 tokens, Loss: 10.9966):
     Tokens: ['同', '名', '的', '漫', '画', '版', '由', '日', '本', '漫', '画', '家', 'A', 's', 'a', 'k', 'i', '负', '责', '漫', '画', '。']
     
-    BPE (small) (16 tokens, Loss: 12.8504):
+    BPE (small) (16 tokens, Loss: 22.1576):
     Tokens: ['同', '名的', '漫', '画', '版', '由', '日本', '漫', '画', '家', 'As', 'aki', '负责', '漫', '画', '。']
     
-    BPE (big) (13 tokens, Loss: 25.8692):
+    BPE (big) (13 tokens, Loss: 21.6628):
     Tokens: ['同', '名的', '漫画', '版', '由', '日本', '漫画', '家', 'As', 'aki', '负责', '漫画', '。']
     ==================================================
     
 
 
+Across the 3 sentences, we can observe a similar pattern: Character-based model has the lowest loss and BPE (big)-based model has the highest loss. This could be due to the largest vocabulary size ($38,500$). In BPE (big)-based model, words are merged as a token. But due to the training is done in 1 epoch, the model is not able to learn the word well.
+
 ### Conclusion
 
+This experiment concludes with 1 of our hypotheses being correct. Turkish uses the most tokens. However, our other hypothesis that BPE (small) would perform best was incorrect. The character tokenizer performed best across all languages.
 
+We also see that a plain BPE Tokenizer is not fair on a multi-lingual corpus. Because the languages have completely different characteristics, the merge slots are not distributed fairly, and that directly causes the model's performance on each language to be unequal.
+
+Instead of forcing English, Turkish and Chinese to share a single dictionary, we suggest that each language has its own tokenizer. Chinese, being a character-based language, will best fit the Character Tokenizer, while English and Turkish have their own BPE Tokenizer so that each languages' frequent sub-words aren't mixed up and they are not unfairly distributed. This should give each language a fair chance to perform well in the language modeling task.
