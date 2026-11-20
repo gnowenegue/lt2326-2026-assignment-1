@@ -4,4 +4,4 @@
 
 Run `uv sync` to install all the dependencies.
 
-The codes and reports are all in `main.ipynb`.
+The code and report are available in [`main.ipynb`](main.ipynb) and exported in [`main.md`](main.md).
