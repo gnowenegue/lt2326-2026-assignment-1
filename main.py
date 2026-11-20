@@ -782,6 +782,18 @@ display(merges_df)
 
 # %% [markdown]
 # ### Relating Tokenization to Model Behavior
+#
+# #### Hypothesis 1
+#
+# We expected BPE (small) would perform best among the tokenizers.
+#
+# But from the BPC scores, Character Tokenizer performed best across all the languages. This might be due to the fact that we have fixed the training to 1 epoch and since the character tokenizer creates more tokens for the same sentence, it might have been able to learn the language better in one epoch.
+#
+# #### Hypothesis 2
+#
+# We expected Turkish to use most tokens.
+#
+# This is mostly true. If we look at the Tokens/Sentence metrics, Turkish has the highest score for Character Tokenizer and BPE (small). But in BPE (big), it barely falls behind Chinese.
 
 # %% [markdown]
 # ### Error Analysis
@@ -818,7 +830,13 @@ for language in LANGUAGES:
     print()
 
 # %% [markdown]
-# ### Conclusion
+# Across the 3 sentences, we can observe a similar pattern: Character-based model has the lowest loss and BPE (big)-based model has the highest loss. This could be due to the largest vocabulary size ($38,500$). In BPE (big)-based model, words are merged as a token. But due to the training is done in 1 epoch, the model is not able to learn the word well.
 
 # %% [markdown]
+# ### Conclusion
 #
+# This experiment concludes with 1 of our hypotheses being correct. Turkish uses the most tokens. However, our other hypothesis that BPE (small) would perform best was incorrect. The character tokenizer performed best across all languages.
+#
+# We also see that a plain BPE Tokenizer is not fair on a multi-lingual corpus. Because the languages have completely different characteristics, the merge slots are not distributed fairly, and that directly causes the model's performance on each language to be unequal.
+#
+# Instead of forcing English, Turkish and Chinese to share a single dictionary, we suggest that each language has its own tokenizer. Chinese, being a character-based language, will best fit the Character Tokenizer, while English and Turkish have their own BPE Tokenizer so that each languages' frequent sub-words aren't mixed up and they are not unfairly distributed. This should give each language a fair chance to perform well in the language modeling task.
