@@ -627,6 +627,8 @@ plt.show()
 # ## Part 3: Evaluation and Analysis
 #
 # ### Comparing Models
+#
+# We have decided to use Bits Per Character (BPC) as our metric for comparing the models. BPC is a measure of the average number of bits required to represent a character in a given text. This directly solves the problem of ordinary token-level perplexity is not directly comparable between models using different tokenizers because each tokenizer breaks down the text into a different number of tokens.
 
 # %%
 def compute_bpc(model, data_loader, total_characters):
@@ -747,6 +749,36 @@ for name, tokenizer in tokenizers.items():
 
 vocabulary_results_df = pd.DataFrame(vocabulary_results)
 display(vocabulary_results_df)
+
+# %% [markdown]
+# #### BPE increment from Character
+
+# %%
+columns = ["English", "Turkish", "Chinese", "Shared"]
+character_stats = vocabulary_results[0]
+merges_data = []
+
+for stat in vocabulary_results[1:]:
+    diff = {
+        column: stat[column] - character_stats[column]
+        for column in columns
+    }
+    total = sum(diff.values())
+
+    row = {"Tokenizer": stat["Tokenizer"]}
+    for column, count in diff.items():
+        row[column] = f"{count:,d} ({count / total:.2%})"
+    row["Total"] = f"{total:,d}"
+
+    merges_data.append(row)
+
+merges_df = pd.DataFrame(merges_data)
+display(merges_df)
+
+# %% [markdown]
+# 1. For the Character Tokenizer, it started off with $7,648$ unique characters. Chinese alone took up more than $7,000$ of them. This again reinforces what was previously mentioned that Chinese characters are tokens with meaning on their own as they do not make up with alphabet. This results in a very large vocabulary size.
+# 2. Chinese does most of the merges as the slots of merges increases. In BPE (small), the merges are spread out with the shared tokens being the most. In BPE (large), the merges are more concentrated in Chinese.
+# 3. Despite English and Turkish both use Latin alphabets, Turkish has more merges than English ($6,712$ vs $4,020$ in BPE - big). For both BPE (small) and BPE (large), English has the least number of merges.
 
 # %% [markdown]
 # ### Relating Tokenization to Model Behavior
